@@ -19,5 +19,5 @@ jobs:
     uses: ./.github/workflows/release-foundry-bundle.yml
     with:
       environment: prod
-      git-ref: ${{ github.event_name == 'workflow_dispatch' && inputs.git-ref || github.event.workflow_run.head_sha }}
+      git-ref: ${{ github.event_name == 'workflow_dispatch' && inputs['git-ref'] || github.event.workflow_run.head_sha }}
     secrets: inherit
