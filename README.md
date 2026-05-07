@@ -16,9 +16,13 @@ It covers prompt flow, Bicep generation and deployment, and post-deployment oper
 
 ![CI/CD Promotion Pipeline](docs/diagrams/cicd-pipeline.png)
 
+**View with Azure icons:** Open [cicd-pipeline.mmd](docs/diagrams/cicd-pipeline.mmd) in [Mermaid Live](https://mermaid.live) to see detailed Azure icons for each component.
+
 ### Azure Resource Architecture — Per Environment
 
 ![Azure Resource Architecture](docs/diagrams/azure-resources.png)
+
+**View with Azure icons:** Open [azure-resources.mmd](docs/diagrams/azure-resources.mmd) in [Mermaid Live](https://mermaid.live) to see Azure service icons for Managed Identity, AI Foundry, Key Vault, Container Registry, Container Apps, AI Search, and App Insights.
 
 ---
 
