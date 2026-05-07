@@ -1,0 +1,70 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#0078D4', 'primaryTextColor': '#fff', 'primaryBorderColor': '#005a9e', 'lineColor': '#444', 'secondaryColor': '#ddeeff', 'tertiaryColor': '#f5f5f5', 'fontSize': '14px'}}}%%
+flowchart TD
+    DEVELOPER(["Developer"])
+
+    subgraph GH_REPO["GitHub Repository"]
+        direction LR
+        DEV_BR["develop branch"]
+        PR_NODE(["Pull Request"])
+        MAIN_BR["main branch"]
+    end
+
+    subgraph PR_GATES["PR Quality Gates"]
+        direction LR
+        SCAN_WF["secret-scan.yml\nNo credentials in repo"]
+        VALID_WF["validate-foundry-assets.yml\nSchema - refs - quality gate profiles"]
+    end
+
+    subgraph CI_DEV["Auto-Deploy to Dev  on push to main"]
+        WF_DEV["deploy-dev-foundry.yml"]
+        ART_DEV["render_foundry_bundle.py\ndev-bundle.json artifact"]
+    end
+
+    subgraph CI_QA["Promote to QA  - Approval Gate"]
+        WF_QA["promote-foundry-qa.yml"]
+        ART_QA["qa-bundle.json artifact"]
+    end
+
+    subgraph CI_PROD["Promote to Prod  - Approval Gate"]
+        WF_PROD["promote-foundry-prod.yml"]
+        ART_PROD["prod-bundle.json artifact"]
+    end
+
+    subgraph AZ_DEV["Azure Dev  -  rg-dev-foundry-operation-lab-eastus2"]
+        direction LR
+        AZ_D1["AI Foundry + Project\ngpt-4.1-mini - incident-triage-agent"]
+        AZ_D2["Key Vault - ACR - AI Search\nContainer Apps Env - App Insights"]
+    end
+
+    subgraph AZ_QA["Azure QA  -  rg-qa-foundry-operation-lab-eastus2"]
+        direction LR
+        AZ_Q1["AI Foundry + Project\ngpt-4.1-mini - incident-triage-agent"]
+        AZ_Q2["Key Vault - ACR - AI Search\nContainer Apps Env - App Insights"]
+    end
+
+    subgraph AZ_PROD["Azure Prod  -  rg-prod-foundry-operation-lab-eastus2"]
+        direction LR
+        AZ_P1["AI Foundry + Project\ngpt-4.1-mini - incident-triage-agent"]
+        AZ_P2["Key Vault - ACR - AI Search\nContainer Apps Env - App Insights"]
+    end
+
+    DEVELOPER -->|"git push"| DEV_BR
+    DEV_BR -->|"open PR"| PR_NODE
+    PR_NODE --> PR_GATES
+    PR_GATES -->|"checks pass - merge"| MAIN_BR
+    MAIN_BR -->|"paths: foundry/** environments/dev/**"| CI_DEV
+    CI_DEV --> AZ_DEV
+    AZ_DEV -->|"on: workflow_run completed"| CI_QA
+    CI_QA --> AZ_QA
+    AZ_QA -->|"on: workflow_run completed"| CI_PROD
+    CI_PROD --> AZ_PROD
+
+    classDef azBox fill:#0078D4,color:#fff,stroke:#005a9e
+    classDef checkBox fill:#107C10,color:#fff,stroke:#094d09
+    classDef ciBox fill:#5C2D91,color:#fff,stroke:#3a1c5e
+    classDef ghBox fill:#24292E,color:#fff,stroke:#111
+
+    class AZ_D1,AZ_D2,AZ_Q1,AZ_Q2,AZ_P1,AZ_P2 azBox
+    class SCAN_WF,VALID_WF checkBox
+    class WF_DEV,ART_DEV,WF_QA,ART_QA,WF_PROD,ART_PROD ciBox
+    class DEV_BR,PR_NODE,MAIN_BR ghBox
