@@ -21,5 +21,7 @@ jobs:
     uses: ./.github/workflows/release-foundry-bundle.yml
     with:
       environment: dev
+      agent_name: incident-triage-hosted
+      agent_version: ${{ github.sha }}
       git_ref: ${{ github.event_name == 'workflow_dispatch' && inputs['git-ref'] || github.sha }}
     secrets: inherit
