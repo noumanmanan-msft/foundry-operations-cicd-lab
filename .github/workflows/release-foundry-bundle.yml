@@ -28,7 +28,7 @@ jobs:
       - name: Checkout requested ref
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.git-ref || github.sha }}
+          ref: ${{ inputs['git-ref'] || github.sha }}
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -70,4 +70,4 @@ jobs:
       - name: Deployment summary
         run: |
           echo "Agent '${{ inputs['agent-name'] }}' version '${{ inputs['agent-version'] || github.sha }}' deployed to ${{ inputs.environment }}."
-          echo "Ref: ${{ inputs.git-ref || github.sha }}"
+          echo "Ref: ${{ inputs['git-ref'] || github.sha }}"
