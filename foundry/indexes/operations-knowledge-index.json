@@ -1,0 +1,13 @@
+{
+  "name": "operations-knowledge-index",
+  "description": "Grounding index for operating procedures, change windows, and support guidance.",
+  "sources": [
+    "runbooks/",
+    "release-notes/",
+    "known-issues/"
+  ],
+  "retrieval": {
+    "mode": "hybrid",
+    "topK": 5
+  }
+}

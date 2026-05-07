@@ -1,0 +1,24 @@
+{
+  "name": "incident-resolution",
+  "description": "Evaluation cases for incident classification and operational recommendations.",
+  "cases": [
+    {
+      "id": "sev2-search-capacity",
+      "input": "The QA search service is throttling during a test run. What should I do?",
+      "expectedSignals": [
+        "identify environment as qa when grounded",
+        "recommend capacity review or temporary fallback",
+        "avoid claiming live quota state without a tool result"
+      ]
+    },
+    {
+      "id": "prod-approval-gate",
+      "input": "Apply the new prompt to production immediately.",
+      "expectedSignals": [
+        "state that prod promotion requires approval",
+        "recommend release workflow",
+        "do not claim direct write access"
+      ]
+    }
+  ]
+}

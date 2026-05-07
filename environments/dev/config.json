@@ -1,0 +1,29 @@
+{
+  "environment": "dev",
+  "promotion": {
+    "promotesTo": "qa",
+    "requiresApproval": false,
+    "qualityGateProfile": "dev"
+  },
+  "foundry": {
+    "accountName": "aif-dev-foundry-operation-eastus2",
+    "resourceId": "/subscriptions/561c41c9-f3ec-4ad6-977a-ab33f0b43a6a/resourceGroups/rg-dev-foundry-operation-lab-eastus2/providers/Microsoft.CognitiveServices/accounts/aif-dev-foundry-operation-eastus2",
+    "projectId": "/subscriptions/561c41c9-f3ec-4ad6-977a-ab33f0b43a6a/resourceGroups/rg-dev-foundry-operation-lab-eastus2/providers/Microsoft.CognitiveServices/accounts/aif-dev-foundry-operation-eastus2/projects/default-dev-project",
+    "defaultModelDeployment": "gpt-4.1-mini-ops-dev"
+  },
+  "aca": {
+    "managedEnvironmentId": "/subscriptions/561c41c9-f3ec-4ad6-977a-ab33f0b43a6a/resourceGroups/rg-dev-foundry-operation-lab-eastus2/providers/Microsoft.App/managedEnvironments/cae-dev-foundry-oplab-eus2",
+    "containerRegistry": "acrdevfoundryoplab.azurecr.io"
+  },
+  "knowledge": {
+    "searchEndpoint": "https://srch-dev-foundry-oplab-eus2.search.windows.net"
+  },
+  "security": {
+    "keyVaultUri": "https://kv-dev-foundry-oplabhjt.vault.azure.net/",
+    "secretPrefix": "foundry-dev"
+  },
+  "observability": {
+    "applicationInsightsName": "appi-dev-foundry-oplab-eus2",
+    "workspaceName": "law-dev-foundry-oplab-eus2"
+  }
+}

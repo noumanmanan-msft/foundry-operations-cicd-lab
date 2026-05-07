@@ -1,0 +1,10 @@
+{
+  "name": "session-memory",
+  "mode": "scoped",
+  "retention": {
+    "dev": "24h",
+    "qa": "72h",
+    "prod": "168h"
+  },
+  "storagePattern": "environment-isolated"
+}

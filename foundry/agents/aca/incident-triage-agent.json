@@ -1,0 +1,21 @@
+{
+  "name": "incident-triage-aca",
+  "kind": "acaHosted",
+  "imageName": "incident-triage-agent",
+  "runtime": {
+    "port": 8080,
+    "healthPath": "/healthz"
+  },
+  "promptRef": "foundry/prompts/incident-triage.system.txt",
+  "guardrailRef": "foundry/guardrails/standard-guardrails.json",
+  "toolsetRef": "foundry/tools/platform-toolset.json",
+  "knowledgeIndexRef": "foundry/indexes/operations-knowledge-index.json",
+  "memoryRef": "foundry/memory/session-memory.json",
+  "deployment": {
+    "replicaProfile": {
+      "dev": { "minReplicas": 1, "maxReplicas": 1 },
+      "qa": { "minReplicas": 1, "maxReplicas": 2 },
+      "prod": { "minReplicas": 2, "maxReplicas": 4 }
+    }
+  }
+}

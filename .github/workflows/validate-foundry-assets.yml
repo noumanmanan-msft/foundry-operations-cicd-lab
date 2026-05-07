@@ -1,0 +1,49 @@
+name: validate-foundry-assets
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - 'docs/**'
+      - 'environments/**'
+      - 'foundry/**'
+      - 'scripts/**'
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/**'
+      - 'docs/**'
+      - 'environments/**'
+      - 'foundry/**'
+      - 'scripts/**'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Validate asset graph
+        run: python scripts/validate_foundry_assets.py
+
+      - name: Render Dev bundle
+        run: python scripts/render_foundry_bundle.py --environment dev --output .dist/dev-bundle.json
+
+      - name: Render QA bundle
+        run: python scripts/render_foundry_bundle.py --environment qa --output .dist/qa-bundle.json
+
+      - name: Render Prod bundle
+        run: python scripts/render_foundry_bundle.py --environment prod --output .dist/prod-bundle.json
+
+      - name: Upload rendered bundles
+        uses: actions/upload-artifact@v4
+        with:
+          name: foundry-bundles-${{ github.sha }}
+          path: .dist/*.json

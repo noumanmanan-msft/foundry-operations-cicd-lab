@@ -1,0 +1,23 @@
+name: promote-foundry-qa
+
+on:
+  workflow_run:
+    workflows:
+      - deploy-dev-foundry
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      git-ref:
+        description: Git ref to promote to QA
+        required: true
+        type: string
+
+jobs:
+  promote-qa:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    uses: ./.github/workflows/release-foundry-bundle.yml
+    with:
+      environment: qa
+      git-ref: ${{ github.event_name == 'workflow_dispatch' && inputs.git-ref || github.event.workflow_run.head_sha }}
+    secrets: inherit

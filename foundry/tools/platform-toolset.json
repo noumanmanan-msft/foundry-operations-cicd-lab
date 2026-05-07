@@ -1,0 +1,20 @@
+{
+  "name": "platform-toolset",
+  "tools": [
+    {
+      "name": "search-knowledge",
+      "kind": "mcp",
+      "purpose": "Ground incident answers against indexed operating content."
+    },
+    {
+      "name": "create-change-ticket",
+      "kind": "function",
+      "purpose": "Open a change record for deployment or policy updates."
+    },
+    {
+      "name": "request-approval",
+      "kind": "function",
+      "purpose": "Initiate human approval for QA or Prod promotion."
+    }
+  ]
+}

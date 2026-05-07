@@ -1,0 +1,16 @@
+{
+  "profiles": {
+    "dev": {
+      "minCasePassRate": 0.8,
+      "minGroundingRate": 0.7
+    },
+    "standard": {
+      "minCasePassRate": 0.9,
+      "minGroundingRate": 0.85
+    },
+    "strict": {
+      "minCasePassRate": 0.95,
+      "minGroundingRate": 0.9
+    }
+  }
+}

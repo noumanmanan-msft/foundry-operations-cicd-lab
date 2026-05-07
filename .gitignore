@@ -1,0 +1,3 @@
+.dist/
+infra/bicep/main.json
+infra/bicep/parameters/*.json

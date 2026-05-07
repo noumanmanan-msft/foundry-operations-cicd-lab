@@ -1,0 +1,23 @@
+name: promote-foundry-prod
+
+on:
+  workflow_run:
+    workflows:
+      - promote-foundry-qa
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      git-ref:
+        description: Git ref to promote to Prod
+        required: true
+        type: string
+
+jobs:
+  promote-prod:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    uses: ./.github/workflows/release-foundry-bundle.yml
+    with:
+      environment: prod
+      git-ref: ${{ github.event_name == 'workflow_dispatch' && inputs.git-ref || github.event.workflow_run.head_sha }}
+    secrets: inherit

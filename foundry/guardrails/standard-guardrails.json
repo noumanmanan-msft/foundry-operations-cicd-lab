@@ -1,0 +1,15 @@
+{
+  "name": "standard-guardrails",
+  "inputPolicies": [
+    "block-secrets-in-chat",
+    "block-credential-exfiltration",
+    "block-production-change-without-approval"
+  ],
+  "outputPolicies": [
+    "require-grounding-for-environment-claims",
+    "require-escalation-when-confidence-low"
+  ],
+  "contentSafety": {
+    "mode": "enterprise-default"
+  }
+}

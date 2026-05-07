@@ -1,0 +1,25 @@
+name: deploy-dev-foundry
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/**'
+      - 'environments/dev/**'
+      - 'foundry/**'
+      - 'scripts/**'
+  workflow_dispatch:
+    inputs:
+      git-ref:
+        description: Git ref to deploy to Dev
+        required: false
+        type: string
+
+jobs:
+  dev:
+    uses: ./.github/workflows/release-foundry-bundle.yml
+    with:
+      environment: dev
+      git-ref: ${{ inputs.git-ref }}
+    secrets: inherit
