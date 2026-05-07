@@ -8,9 +8,18 @@ on:
       - completed
   workflow_dispatch:
     inputs:
-      git-ref:
-        description: Git ref to promote to QA
+      agent-name:
+        description: "Agent name to promote (must match 'name' field in foundry/agents/ JSON)"
         required: true
+        type: string
+        default: incident-triage-hosted
+      agent-version:
+        description: "Version tag to stamp on the agent (e.g. v1.2.0)"
+        required: true
+        type: string
+      git-ref:
+        description: "Git ref to deploy from (branch, tag, or SHA — defaults to main)"
+        required: false
         type: string
 
 jobs:
@@ -19,5 +28,7 @@ jobs:
     uses: ./.github/workflows/release-foundry-bundle.yml
     with:
       environment: qa
+      agent-name: ${{ github.event_name == 'workflow_dispatch' && inputs.agent-name || 'incident-triage-hosted' }}
+      agent-version: ${{ github.event_name == 'workflow_dispatch' && inputs.agent-version || github.event.workflow_run.head_sha }}
       git-ref: ${{ github.event_name == 'workflow_dispatch' && inputs.git-ref || github.event.workflow_run.head_sha }}
     secrets: inherit

@@ -6,6 +6,13 @@ on:
       environment:
         required: true
         type: string
+      agent-name:
+        required: false
+        type: string
+        default: incident-triage-hosted
+      agent-version:
+        required: false
+        type: string
       git-ref:
         required: false
         type: string
@@ -28,11 +35,17 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Install Foundry SDK dependencies
+        run: pip install azure-ai-projects azure-identity
+
       - name: Validate asset graph
         run: python scripts/validate_foundry_assets.py
 
       - name: Render environment bundle
-        run: python scripts/render_foundry_bundle.py --environment ${{ inputs.environment }} --output .dist/${{ inputs.environment }}-bundle.json
+        run: |
+          python scripts/render_foundry_bundle.py \
+            --environment ${{ inputs.environment }} \
+            --output .dist/${{ inputs.environment }}-bundle.json
 
       - name: Publish promotion artifact
         uses: actions/upload-artifact@v4
@@ -40,7 +53,21 @@ jobs:
           name: foundry-${{ inputs.environment }}-${{ github.sha }}
           path: .dist/${{ inputs.environment }}-bundle.json
 
-      - name: Deployment handoff summary
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy agent to Foundry
         run: |
-          echo "Prepared ${{ inputs.environment }} bundle from ref ${{ inputs.git-ref || github.sha }}"
-          echo "Next step: wire direct Foundry deployment commands or secure runner integration."
+          python scripts/deploy_agent_to_foundry.py \
+            --agent-name "${{ inputs.agent-name }}" \
+            --environment "${{ inputs.environment }}" \
+            --version "${{ inputs.agent-version || github.sha }}"
+
+      - name: Deployment summary
+        run: |
+          echo "Agent '${{ inputs.agent-name }}' version '${{ inputs.agent-version || github.sha }}' deployed to ${{ inputs.environment }}."
+          echo "Ref: ${{ inputs.git-ref || github.sha }}"
