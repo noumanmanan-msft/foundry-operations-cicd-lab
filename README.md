@@ -141,6 +141,13 @@ az deployment sub create \
 
 ## 5. Once Resources Are Created Through Bicep: Next Steps
 
+### 5.0 Branching policy (required)
+
+1. Make all repository changes on `develop` (or a short-lived feature branch created from `develop`).
+2. Promote changes only through a pull request into `main`.
+3. Do not push directly to `main`.
+4. Merge to `main` is the release signal for deployment workflows.
+
 ### 5.1 Platform validation
 
 1. Confirm resource groups and key resources exist in each environment

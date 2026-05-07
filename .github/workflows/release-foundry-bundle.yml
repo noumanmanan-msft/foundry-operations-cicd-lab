@@ -63,11 +63,11 @@ jobs:
       - name: Deploy agent to Foundry
         run: |
           python scripts/deploy_agent_to_foundry.py \
-            --agent-name "${{ inputs.agent-name }}" \
+            --agent-name "${{ inputs['agent-name'] }}" \
             --environment "${{ inputs.environment }}" \
-            --version "${{ inputs.agent-version || github.sha }}"
+            --version "${{ inputs['agent-version'] || github.sha }}"
 
       - name: Deployment summary
         run: |
-          echo "Agent '${{ inputs.agent-name }}' version '${{ inputs.agent-version || github.sha }}' deployed to ${{ inputs.environment }}."
+          echo "Agent '${{ inputs['agent-name'] }}' version '${{ inputs['agent-version'] || github.sha }}' deployed to ${{ inputs.environment }}."
           echo "Ref: ${{ inputs.git-ref || github.sha }}"

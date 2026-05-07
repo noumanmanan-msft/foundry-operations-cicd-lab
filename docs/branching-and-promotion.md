@@ -2,6 +2,10 @@
 
 This repository uses a PR-first promotion model.
 
+## Required branch policy
+- Make all day-to-day changes on `develop`.
+- Open a pull request from `develop` into `main` for promotion.
+- Do not push directly to `main`.
 ## Flow
 - Work happens on feature branches.
 - Changes merge into `main` via pull request.
