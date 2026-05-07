@@ -68,8 +68,16 @@ def find_search_connection(connections_client):
 
 def find_existing_agent(agents_client, agent_name: str):
     """Return the agent object if it already exists in the project, else None."""
+    list_fn = getattr(agents_client, "list", None) or getattr(agents_client, "list_agents", None)
+    if list_fn is None:
+        print(
+            "[deploy] Warning: agents client does not expose list/list_agents.",
+            file=sys.stderr,
+        )
+        return None
+
     try:
-        for agent in agents_client.list_agents():
+        for agent in list_fn():
             if agent.name == agent_name:
                 return agent
     except Exception as exc:

@@ -1,0 +1,10 @@
+{
+  "name": "agent-1-toolset",
+  "tools": [
+    {
+      "name": "web-search",
+      "kind": "platform",
+      "purpose": "Use web search when current public information is needed."
+    }
+  ]
+}

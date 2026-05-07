@@ -1,0 +1,12 @@
+{
+  "name": "agent-1-model",
+  "type": "modelDeployment",
+  "modelFamily": "gpt-5.4",
+  "deploymentMode": "managed",
+  "capabilities": [
+    "chat"
+  ],
+  "promotion": {
+    "strategy": "same-asset-different-config"
+  }
+}

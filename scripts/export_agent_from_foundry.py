@@ -39,12 +39,32 @@ def build_project_endpoint(config: dict) -> str:
 
 def find_agent_by_name(agents_client, agent_name: str):
     """Return the first agent whose name matches, or raise."""
-    for agent in agents_client.list_agents():
+    list_fn = getattr(agents_client, "list", None) or getattr(agents_client, "list_agents", None)
+    get_fn = getattr(agents_client, "get", None) or getattr(agents_client, "get_agent", None)
+
+    if list_fn is None or get_fn is None:
+        raise RuntimeError(
+            "Unsupported azure-ai-projects SDK version: agents client does not expose "
+            "expected list/get methods."
+        )
+
+    for agent in list_fn():
         if agent.name == agent_name:
-            return agents_client.get_agent(agent.id)
+            return get_fn(agent.id)
+
+    available_names = []
+    for agent in list_fn():
+        if getattr(agent, "name", None):
+            available_names.append(agent.name)
+
+    details = ""
+    if available_names:
+        details = f" Available agents: {', '.join(sorted(available_names))}."
+
     raise ValueError(
         f"No agent named '{agent_name}' found. "
         "Check the name matches exactly what is shown in the Foundry portal."
+        f"{details}"
     )
 
 
@@ -59,6 +79,48 @@ def safe_as_dict(obj):
     if isinstance(obj, dict):
         return {k: safe_as_dict(v) for k, v in obj.items()}
     return obj
+
+
+def extract_agent_fields(agent) -> dict:
+    """Normalize agent payload across azure-ai-projects SDK versions."""
+    payload = safe_as_dict(agent) or {}
+
+    # Newer SDK shape: AgentDetails with versions.latest.definition
+    latest = ((payload.get("versions") or {}).get("latest") or {})
+    definition = latest.get("definition") or {}
+
+    if definition:
+        metadata = latest.get("metadata") or {}
+        return {
+            "id": payload.get("id"),
+            "name": payload.get("name"),
+            "description": latest.get("description") or metadata.get("description") or "",
+            "model": definition.get("model"),
+            "instructions": definition.get("instructions") or "",
+            "temperature": definition.get("temperature"),
+            "topP": definition.get("top_p") or definition.get("topP"),
+            "tools": definition.get("tools") or [],
+            "toolResources": definition.get("tool_resources") or definition.get("toolResources") or {},
+            "metadata": metadata,
+            "version": latest.get("version"),
+            "versionId": latest.get("id"),
+        }
+
+    # Older SDK shape: direct attributes on returned agent object
+    return {
+        "id": getattr(agent, "id", None),
+        "name": getattr(agent, "name", None),
+        "description": getattr(agent, "description", "") or "",
+        "model": getattr(agent, "model", None),
+        "instructions": getattr(agent, "instructions", "") or "",
+        "temperature": getattr(agent, "temperature", None),
+        "topP": getattr(agent, "top_p", None),
+        "tools": safe_as_dict(getattr(agent, "tools", [])) or [],
+        "toolResources": safe_as_dict(getattr(agent, "tool_resources", {})) or {},
+        "metadata": dict(getattr(agent, "metadata", {}) or {}),
+        "version": None,
+        "versionId": None,
+    }
 
 
 def export_agent(agent_name: str, environment: str, output_path: Path | None) -> dict:
@@ -82,22 +144,12 @@ def export_agent(agent_name: str, environment: str, output_path: Path | None) ->
     print(f"[export] Found agent id={agent.id}", file=sys.stderr)
 
     # Capture the full agent state
+    agent_fields = extract_agent_fields(agent)
     bundle = {
         "schemaVersion": "1.0",
         "exportedFrom": environment,
         "foundryAccountName": config["foundry"]["accountName"],
-        "agent": {
-            "id": agent.id,
-            "name": agent.name,
-            "description": getattr(agent, "description", "") or "",
-            "model": agent.model,
-            "instructions": agent.instructions or "",
-            "temperature": getattr(agent, "temperature", None),
-            "topP": getattr(agent, "top_p", None),
-            "tools": safe_as_dict(agent.tools) or [],
-            "toolResources": safe_as_dict(agent.tool_resources) or {},
-            "metadata": dict(agent.metadata or {}),
-        },
+        "agent": agent_fields,
     }
 
     # Also capture active connections for reference
