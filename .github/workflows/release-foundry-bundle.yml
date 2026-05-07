@@ -9,7 +9,6 @@ on:
       agent_name:
         required: false
         type: string
-        default: incident-triage-hosted
       agent_version:
         required: false
         type: string
