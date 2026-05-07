@@ -169,16 +169,36 @@ def deploy_agent(agent_name: str, environment: str, version: str | None) -> dict
         metadata=metadata,
     )
 
+    create_fn = (
+        getattr(client.agents, "create_agent", None)
+        or getattr(client.agents, "create", None)
+        or getattr(client.agents, "_create_agent", None)
+    )
+    update_fn = (
+        getattr(client.agents, "update_agent", None)
+        or getattr(client.agents, "update", None)
+        or getattr(client.agents, "_update_agent", None)
+    )
+
+    if create_fn is None:
+        raise RuntimeError(
+            "Unsupported azure-ai-projects SDK version: no create method found on agents client."
+        )
+
     existing = find_existing_agent(client.agents, agent_name)
     if existing:
+        if update_fn is None:
+            raise RuntimeError(
+                "Unsupported azure-ai-projects SDK version: no update method found on agents client."
+            )
         print(
             f"[deploy] Updating existing agent '{agent_name}' (id={existing.id})",
             file=sys.stderr,
         )
-        agent = client.agents.update_agent(existing.id, **agent_kwargs)
+        agent = update_fn(existing.id, **agent_kwargs)
     else:
         print(f"[deploy] Creating new agent '{agent_name}'", file=sys.stderr)
-        agent = client.agents.create_agent(**agent_kwargs)
+        agent = create_fn(**agent_kwargs)
 
     print(
         f"[deploy] Done — id={agent.id}  name={agent.name}  model={agent.model}",
