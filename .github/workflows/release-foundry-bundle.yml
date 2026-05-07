@@ -6,14 +6,14 @@ on:
       environment:
         required: true
         type: string
-      agent-name:
+      agent_name:
         required: false
         type: string
         default: incident-triage-hosted
-      agent-version:
+      agent_version:
         required: false
         type: string
-      git-ref:
+      git_ref:
         required: false
         type: string
 
@@ -28,7 +28,7 @@ jobs:
       - name: Checkout requested ref
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs['git-ref'] || github.sha }}
+          ref: ${{ inputs.git_ref || github.sha }}
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -63,11 +63,11 @@ jobs:
       - name: Deploy agent to Foundry
         run: |
           python scripts/deploy_agent_to_foundry.py \
-            --agent-name "${{ inputs['agent-name'] }}" \
+            --agent-name "${{ inputs.agent_name }}" \
             --environment "${{ inputs.environment }}" \
-            --version "${{ inputs['agent-version'] || github.sha }}"
+            --version "${{ inputs.agent_version || github.sha }}"
 
       - name: Deployment summary
         run: |
-          echo "Agent '${{ inputs['agent-name'] }}' version '${{ inputs['agent-version'] || github.sha }}' deployed to ${{ inputs.environment }}."
-          echo "Ref: ${{ inputs['git-ref'] || github.sha }}"
+          echo "Agent '${{ inputs.agent_name }}' version '${{ inputs.agent_version || github.sha }}' deployed to ${{ inputs.environment }}."
+          echo "Ref: ${{ inputs.git_ref || github.sha }}"
