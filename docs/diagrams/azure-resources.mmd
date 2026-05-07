@@ -1,45 +1,69 @@
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#0078D4', 'primaryTextColor': '#fff', 'primaryBorderColor': '#005a9e', 'lineColor': '#0078D4', 'secondaryColor': '#ddeeff', 'tertiaryColor': '#f5f5f5', 'fontSize': '14px'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#0078D4', 'primaryTextColor': '#fff', 'primaryBorderColor': '#005a9e', 'lineColor': '#0078D4', 'secondaryColor': '#ddeeff', 'tertiaryColor': '#f5f5f5', 'fontSize': '13px'}}}%%
 flowchart LR
-    subgraph DEV_RG["Azure Dev  -  rg-dev-foundry-operation-lab-eastus2"]
+    subgraph DEV_RG["Azure Dev - rg-dev-foundry-operation-lab-eastus2"]
         direction TB
-        D_MI["Managed Identity\nAzure AI Developer - Secrets User\nAcrPull - Search Contributor"]
-        D_AIF["AI Foundry\naif-dev-foundry-operation-eastus2"]
-        D_PROJ["Foundry Project\ndefault-dev-project"]
-        D_KV["Key Vault\nkv-dev-foundry-oplabhjt"]
-        D_ACR["Container Registry\nacrdevfoundryoplab.azurecr.io"]
-        D_ACA["Container Apps Env\nACA-hosted incident-triage-agent"]
-        D_SRCH["AI Search\nops-knowledge-index - hybrid retrieval"]
+        D_MI["Managed Identity<br/>AI Developer"]
+        D_MI@{ icon: "azure:managed-identities", label: "Managed Identity<br/>AI Developer · Secrets User" }
+        D_AIF["AI Foundry<br/>aif-dev-foundry-operation-eastus2"]
+        D_AIF@{ icon: "azure:ai-studio", label: "AI Foundry<br/>aif-dev-foundry-operation-eastus2" }
+        D_PROJ["Foundry Project<br/>default-dev-project"]
+        D_PROJ@{ icon: "azure:machine-learning", label: "Foundry Project<br/>default-dev-project" }
+        D_KV["Key Vault<br/>kv-dev-foundry-oplabhjt"]
+        D_KV@{ icon: "azure:key-vaults", label: "Key Vault<br/>kv-dev-foundry-oplabhjt" }
+        D_ACR["Container Registry<br/>acrdevfoundryoplab.azurecr.io"]
+        D_ACR@{ icon: "azure:container-registries", label: "Container Registry<br/>acrdevfoundryoplab" }
+        D_ACA["Container Apps Env<br/>incident-triage-agent"]
+        D_ACA@{ icon: "azure:container-apps-environments", label: "Container Apps Env<br/>incident-triage-agent" }
+        D_SRCH["AI Search<br/>ops-knowledge-index"]
+        D_SRCH@{ icon: "azure:cognitive-search", label: "AI Search<br/>ops-knowledge-index" }
         D_OBS["App Insights + Log Analytics"]
+        D_OBS@{ icon: "azure:application-insights", label: "App Insights + Log Analytics" }
         D_MI --> D_AIF & D_KV & D_ACR & D_SRCH
         D_AIF --> D_PROJ
         D_PROJ --> D_ACA
     end
 
-    subgraph QA_RG["Azure QA  -  rg-qa-foundry-operation-lab-eastus2"]
+    subgraph QA_RG["Azure QA - rg-qa-foundry-operation-lab-eastus2"]
         direction TB
-        Q_MI["Managed Identity"]
-        Q_AIF["AI Foundry\naif-qa-foundry-operation-eastus2"]
-        Q_PROJ["Foundry Project\ndefault-qa-project"]
+        Q_MI["Managed Identity<br/>AI Developer"]
+        Q_MI@{ icon: "azure:managed-identities", label: "Managed Identity<br/>AI Developer · Secrets User" }
+        Q_AIF["AI Foundry<br/>aif-qa-foundry-operation-eastus2"]
+        Q_AIF@{ icon: "azure:ai-studio", label: "AI Foundry<br/>aif-qa-foundry-operation-eastus2" }
+        Q_PROJ["Foundry Project<br/>default-qa-project"]
+        Q_PROJ@{ icon: "azure:machine-learning", label: "Foundry Project<br/>default-qa-project" }
         Q_KV["Key Vault"]
+        Q_KV@{ icon: "azure:key-vaults", label: "Key Vault" }
         Q_ACR["Container Registry"]
+        Q_ACR@{ icon: "azure:container-registries", label: "Container Registry" }
         Q_ACA["Container Apps Env"]
+        Q_ACA@{ icon: "azure:container-apps-environments", label: "Container Apps Env" }
         Q_SRCH["AI Search"]
+        Q_SRCH@{ icon: "azure:cognitive-search", label: "AI Search" }
         Q_OBS["App Insights + Log Analytics"]
+        Q_OBS@{ icon: "azure:application-insights", label: "App Insights + Log Analytics" }
         Q_MI --> Q_AIF & Q_KV & Q_ACR & Q_SRCH
         Q_AIF --> Q_PROJ
         Q_PROJ --> Q_ACA
     end
 
-    subgraph PROD_RG["Azure Prod  -  rg-prod-foundry-operation-lab-eastus2"]
+    subgraph PROD_RG["Azure Prod - rg-prod-foundry-operation-lab-eastus2"]
         direction TB
-        P_MI["Managed Identity"]
-        P_AIF["AI Foundry\naif-prod-foundry-operation-eastus2"]
-        P_PROJ["Foundry Project\ndefault-prod-project"]
+        P_MI["Managed Identity<br/>AI Developer"]
+        P_MI@{ icon: "azure:managed-identities", label: "Managed Identity<br/>AI Developer · Secrets User" }
+        P_AIF["AI Foundry<br/>aif-prod-foundry-operation-eastus2"]
+        P_AIF@{ icon: "azure:ai-studio", label: "AI Foundry<br/>aif-prod-foundry-operation-eastus2" }
+        P_PROJ["Foundry Project<br/>default-prod-project"]
+        P_PROJ@{ icon: "azure:machine-learning", label: "Foundry Project<br/>default-prod-project" }
         P_KV["Key Vault"]
+        P_KV@{ icon: "azure:key-vaults", label: "Key Vault" }
         P_ACR["Container Registry"]
+        P_ACR@{ icon: "azure:container-registries", label: "Container Registry" }
         P_ACA["Container Apps Env"]
+        P_ACA@{ icon: "azure:container-apps-environments", label: "Container Apps Env" }
         P_SRCH["AI Search"]
+        P_SRCH@{ icon: "azure:cognitive-search", label: "AI Search" }
         P_OBS["App Insights + Log Analytics"]
+        P_OBS@{ icon: "azure:application-insights", label: "App Insights + Log Analytics" }
         P_MI --> P_AIF & P_KV & P_ACR & P_SRCH
         P_AIF --> P_PROJ
         P_PROJ --> P_ACA
