@@ -169,6 +169,17 @@ def deploy_agent(agent_name: str, environment: str, version: str | None) -> dict
         metadata=metadata,
     )
 
+    definition = {
+        "kind": "prompt",
+        "model": model_deployment,
+        "instructions": system_prompt,
+        "tools": tools,
+    }
+    if tool_resources:
+        definition["tool_resources"] = tool_resources
+
+    create_version_fn = getattr(client.agents, "create_version", None)
+
     create_fn = (
         getattr(client.agents, "create_agent", None)
         or getattr(client.agents, "create", None)
@@ -180,10 +191,32 @@ def deploy_agent(agent_name: str, environment: str, version: str | None) -> dict
         or getattr(client.agents, "_update_agent", None)
     )
 
-    if create_fn is None:
+    if create_fn is None and create_version_fn is None:
         raise RuntimeError(
-            "Unsupported azure-ai-projects SDK version: no create method found on agents client."
+            "Unsupported azure-ai-projects SDK version: no create or create_version method found on agents client."
         )
+
+    if create_version_fn is not None:
+        print(
+            f"[deploy] Creating/updating version for agent '{agent_name}' via create_version",
+            file=sys.stderr,
+        )
+        agent = create_version_fn(
+            agent_name=agent_name,
+            definition=definition,
+            metadata=metadata,
+            description=agent_def.get("description", ""),
+        )
+        summary = {
+            "agentId": getattr(agent, "id", None),
+            "name": getattr(agent, "name", agent_name),
+            "model": model_deployment,
+            "environment": environment,
+            "version": version,
+            "endpoint": endpoint,
+        }
+        print(json.dumps(summary, indent=2))
+        return summary
 
     existing = find_existing_agent(client.agents, agent_name)
     if existing:
