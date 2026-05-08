@@ -60,13 +60,6 @@
       "action": "NONE"
     },
     {
-      "name": "Protected Material Code",
-      "blocking": true,
-      "enabled": true,
-      "source": "Completion",
-      "action": "NONE"
-    },
-    {
       "name": "Purview",
       "blocking": true,
       "enabled": true,
@@ -118,16 +111,16 @@
       "action": "NONE"
     },
     {
-      "name": "Protected Material Text",
+      "name": "Protected Material Code",
       "blocking": false,
-      "enabled": true,
-      "source": "PreToolCall",
+      "enabled": false,
+      "source": "Completion",
       "action": "NONE"
     },
     {
       "name": "Protected Material Text",
       "blocking": false,
-      "enabled": true,
+      "enabled": false,
       "source": "Completion",
       "action": "NONE"
     },
