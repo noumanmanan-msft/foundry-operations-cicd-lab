@@ -230,12 +230,30 @@ def deploy_agent(agent_name: str, environment: str, version: str | None) -> dict
             f"[deploy] Creating/updating version for agent '{agent_name}' via create_version",
             file=sys.stderr,
         )
-        agent = create_version_fn(
-            agent_name=agent_name,
-            definition=definition,
-            metadata=metadata,
-            description=agent_def.get("description", ""),
-        )
+        try:
+            agent = create_version_fn(
+                agent_name=agent_name,
+                definition=definition,
+                metadata=metadata,
+                description=agent_def.get("description", ""),
+            )
+        except Exception as exc:
+            exc_str = str(exc).lower()
+            if rai_policy_name and ("rai policy" in exc_str or "raipolici" in exc_str or "bad_request" in exc_str):
+                print(
+                    f"[deploy] Warning: RAI policy '{rai_policy_name}' does not exist in this environment. "
+                    "Deploying without guardrail — create the policy in this Foundry account to enforce it.",
+                    file=sys.stderr,
+                )
+                definition_no_rai = {k: v for k, v in definition.items() if k != "rai_config"}
+                agent = create_version_fn(
+                    agent_name=agent_name,
+                    definition=definition_no_rai,
+                    metadata=metadata,
+                    description=agent_def.get("description", ""),
+                )
+            else:
+                raise
         summary = {
             "agentId": getattr(agent, "id", None),
             "name": getattr(agent, "name", agent_name),
