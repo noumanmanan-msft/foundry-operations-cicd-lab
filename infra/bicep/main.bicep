@@ -80,3 +80,4 @@ output containerRegistryLoginServer string = resources.outputs.containerRegistry
 output containerAppsEnvironmentId string = resources.outputs.containerAppsEnvironmentId
 output keyVaultUri string = resources.outputs.keyVaultUri
 output aiSearchEndpoint string = resources.outputs.aiSearchEndpoint
+output aiSearchIndexName string = resources.outputs.aiSearchIndexName

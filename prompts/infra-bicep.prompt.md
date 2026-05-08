@@ -46,6 +46,7 @@ Replace `<env>` with `dev`, `qa`, or `prod` and `<location>`/`<abbr>` as shown:
 | Application Insights          | `appi-<env>-foundry-oplab-<locationAbbr>`            |
 | Container Apps Environment    | `cae-<env>-foundry-oplab-<locationAbbr>`             |
 | Azure AI Search               | `srch-<env>-foundry-oplab-<locationAbbr>`            |
+| Azure AI Search Index         | `default`                                             |
 | User-Assigned Managed Identity| `id-<env>-foundry-oplab-<locationAbbr>`              |
 
 ### Required Services Per Environment
@@ -58,10 +59,11 @@ Provision the following for each environment:
 4. **Storage Account** — blob storage required by Foundry; also used by agents for state
 5. **Key Vault** — secrets, certificates, API keys; RBAC-authorized (not access policy)
 6. **Azure Container Registry** — container images for ACA self-hosted agents
-7. **Azure AI Search** — vector index for Foundry IQ / RAG grounding
-8. **Azure AI Foundry** (new model) — the core Foundry resource
-9. **Foundry Project** — workspace inside the Foundry resource
-10. **Azure Container Apps Environment** — hosting environment for self-hosted agents; connected to Log Analytics
+7. **Azure AI Search** — service for Foundry IQ / RAG grounding
+8. **Azure AI Search Index (`default`)** — index created inside the Azure AI Search service by template code (deployment script)
+9. **Azure AI Foundry** (new model) — the core Foundry resource
+10. **Foundry Project** — workspace inside the Foundry resource
+11. **Azure Container Apps Environment** — hosting environment for self-hosted agents; connected to Log Analytics
 
 ### RBAC Assignments
 
@@ -93,6 +95,7 @@ Apply these differences based on environment via inline conditionals (not extra 
 - ACR must disable admin user
 - Tags applied to every resource: `{ environment, project: 'foundry-operations-cicd-lab', managedBy: 'bicep' }`
 - `foundryAdminObjectId` defaults to empty string; skip the role assignment when empty
+- Include template logic that provisions Azure AI Search index `default` during deployment (do not require a separate manual step)
 
 ### Output Format
 

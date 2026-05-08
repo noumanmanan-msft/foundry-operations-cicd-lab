@@ -38,6 +38,12 @@ def load_json(path: Path) -> dict:
         raise ValueError(f"Invalid JSON in {path}: {exc}") from exc
 
 
+def maybe_load_json(repo_root: Path, path_str: str | None) -> dict:
+    if not path_str:
+        return {}
+    return load_json(repo_root / path_str)
+
+
 def resolve_agent_file(repo_root: Path, agent_name: str) -> Path:
     """Find the agent JSON file whose 'name' field matches agent_name."""
     for candidate in sorted((repo_root / "foundry" / "agents").rglob("*.json")):
@@ -104,15 +110,16 @@ def deploy_agent(agent_name: str, environment: str, version: str | None) -> dict
     agent_def = load_json(agent_file)
     print(f"[deploy] Loaded agent definition: {agent_file}", file=sys.stderr)
 
-    model_cfg = load_json(repo_root / agent_def["modelRef"])
-    system_prompt = (repo_root / agent_def["promptRef"]).read_text().strip()
-    guardrail_cfg = load_json(repo_root / agent_def["guardrailRef"])
-    index_cfg = load_json(repo_root / agent_def["knowledgeIndexRef"])
-    memory_cfg = load_json(repo_root / agent_def["memoryRef"])
+    model_cfg = maybe_load_json(repo_root, agent_def.get("modelRef"))
+    prompt_ref = agent_def.get("promptRef")
+    system_prompt = (repo_root / prompt_ref).read_text().strip() if prompt_ref else ""
+    guardrail_cfg = maybe_load_json(repo_root, agent_def.get("guardrailRef"))
+    index_cfg = maybe_load_json(repo_root, agent_def.get("knowledgeIndexRef"))
+    memory_cfg = maybe_load_json(repo_root, agent_def.get("memoryRef"))
 
     print(
-        f"[deploy] Assets loaded — model={model_cfg['name']}, "
-        f"index={index_cfg['name']}, memory={memory_cfg['name']}",
+        f"[deploy] Assets loaded — model={model_cfg.get('name', model_deployment)}, "
+        f"index={index_cfg.get('name', 'none')}, memory={memory_cfg.get('name', 'none')}",
         file=sys.stderr,
     )
 
@@ -140,7 +147,7 @@ def deploy_agent(agent_name: str, environment: str, version: str | None) -> dict
     tool_resources = None
 
     search_conn = find_search_connection(client.connections)
-    if search_conn:
+    if search_conn and index_cfg.get("name"):
         print(
             f"[deploy] Found search connection: {getattr(search_conn, 'name', search_conn.id)}",
             file=sys.stderr,
@@ -151,6 +158,11 @@ def deploy_agent(agent_name: str, environment: str, version: str | None) -> dict
         )
         tools = ai_search.definitions
         tool_resources = ai_search.resources
+    elif search_conn and not index_cfg.get("name"):
+        print(
+            "[deploy] Warning: search connection exists, but agent has no attached knowledge index metadata.",
+            file=sys.stderr,
+        )
     else:
         print(
             "[deploy] Warning: no Azure AI Search connection found — "
