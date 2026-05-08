@@ -189,7 +189,49 @@ def extract_search_attachment(tools: list[dict[str, Any]], tool_resources: dict[
     return payload
 
 
-def derive_attached_resources(bundle: dict) -> dict:
+def fetch_rai_policy_from_arm(credential, foundry_resource_id: str, policy_basename: str) -> dict | None:
+    """Fetch full RAI policy settings (content filters, mode, base policy) via the ARM API.
+
+    The Foundry SDK only surfaces the policy *name*; the ARM raiPolicies resource is the
+    only place that holds severity thresholds, blocking flags, and enabled/disabled states.
+    Calling this from the exporter captures those settings so they can be stored in the
+    repo and promoted through Dev -> QA -> Prod.
+    """
+    import urllib.error
+    import urllib.request
+
+    try:
+        token = credential.get_token("https://management.azure.com/.default")
+    except Exception as exc:
+        print(f"[export] Warning: could not acquire ARM token: {exc}", file=sys.stderr)
+        return None
+
+    url = (
+        f"https://management.azure.com{foundry_resource_id}"
+        f"/raiPolicies/{policy_basename}?api-version=2024-10-01"
+    )
+    req = urllib.request.Request(url)
+    req.add_header("Authorization", f"Bearer {token.token}")
+    req.add_header("Accept", "application/json")
+
+    try:
+        with urllib.request.urlopen(req) as resp:
+            data = json.loads(resp.read())
+            print(f"[export] Fetched RAI policy '{policy_basename}' content filters from ARM", file=sys.stderr)
+            return data
+    except urllib.error.HTTPError as exc:
+        print(
+            f"[export] Warning: ARM GET raiPolicies/{policy_basename} returned {exc.code} — "
+            "content filters will not be captured.",
+            file=sys.stderr,
+        )
+        return None
+    except Exception as exc:
+        print(f"[export] Warning: could not fetch RAI policy from ARM: {exc}", file=sys.stderr)
+        return None
+
+
+def derive_attached_resources(bundle: dict, arm_rai_policy: dict | None = None) -> dict:
     agent = bundle["agent"]
     metadata = agent.get("metadata") or {}
     tools = agent.get("tools") or []
@@ -233,6 +275,15 @@ def derive_attached_resources(bundle: dict) -> dict:
             # Store only the basename so the deployer can resolve it against any
             # target environment's Foundry account (dev, qa, prod) at deployment time.
             guardrail_payload["raiPolicyName"] = basename_from_resource_id(rai_policy_name) or rai_policy_name
+        # Merge full content filter settings fetched from ARM (severity thresholds, etc.)
+        if arm_rai_policy:
+            props = arm_rai_policy.get("properties") or {}
+            if props.get("contentFilters"):
+                guardrail_payload["contentFilters"] = props["contentFilters"]
+            if props.get("mode"):
+                guardrail_payload["mode"] = props["mode"]
+            if props.get("basePolicyName"):
+                guardrail_payload["basePolicyName"] = props["basePolicyName"]
         attached["guardrail"] = guardrail_payload
 
     if tools:
@@ -466,7 +517,17 @@ def export_agent(
         print(f"[export] Warning: could not list connections: {exc}", file=sys.stderr)
         bundle["connections"] = []
 
-    bundle["attachedResources"] = derive_attached_resources(bundle)
+    # Fetch full RAI policy settings from ARM — the Foundry SDK only surfaces the policy
+    # name, not the content filter thresholds configured in the portal.
+    arm_rai_policy: dict | None = None
+    rai_policy_basename = basename_from_resource_id(
+        (agent_fields.get("raiConfig") or {}).get("raiPolicyName")
+    )
+    foundry_resource_id = config["foundry"].get("resourceId", "")
+    if rai_policy_basename and foundry_resource_id:
+        arm_rai_policy = fetch_rai_policy_from_arm(credential, foundry_resource_id, rai_policy_basename)
+
+    bundle["attachedResources"] = derive_attached_resources(bundle, arm_rai_policy=arm_rai_policy)
 
     result_json = json.dumps(bundle, indent=2) + "\n"
 

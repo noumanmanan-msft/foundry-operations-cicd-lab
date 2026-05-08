@@ -91,6 +91,67 @@ def find_existing_agent(agents_client, agent_name: str):
     return None
 
 
+def ensure_rai_policy_in_arm(credential, foundry_resource_id: str, guardrail_cfg: dict) -> bool:
+    """Create or update the RAI content filter policy in ARM for the target environment.
+
+    Reads contentFilters from the guardrail config (written by the exporter) and PUTs them
+    to the target Foundry account so that the exact Dev content filter thresholds (severity
+    levels, blocking flags, enabled/disabled states) are replicated before the agent version
+    is created. Returns True if the policy was synced successfully.
+    """
+    import urllib.error
+    import urllib.request
+
+    policy_basename = guardrail_cfg.get("raiPolicyName")
+    content_filters = guardrail_cfg.get("contentFilters")
+    if not (policy_basename and content_filters and foundry_resource_id):
+        return False
+
+    try:
+        token = credential.get_token("https://management.azure.com/.default")
+    except Exception as exc:
+        print(f"[deploy] Warning: could not acquire ARM token for RAI policy sync: {exc}", file=sys.stderr)
+        return False
+
+    body = json.dumps({
+        "properties": {
+            "basePolicyName": guardrail_cfg.get("basePolicyName", "Microsoft.DefaultV2"),
+            "mode": guardrail_cfg.get("mode", "Deferred"),
+            "contentFilters": content_filters,
+        }
+    }).encode()
+
+    url = (
+        f"https://management.azure.com{foundry_resource_id}"
+        f"/raiPolicies/{policy_basename}?api-version=2024-10-01"
+    )
+    req = urllib.request.Request(url, data=body, method="PUT")
+    req.add_header("Authorization", f"Bearer {token.token}")
+    req.add_header("Content-Type", "application/json")
+    req.add_header("Accept", "application/json")
+
+    try:
+        with urllib.request.urlopen(req) as resp:
+            resp.read()
+            account_name = foundry_resource_id.rstrip("/").split("/")[-1]
+            print(
+                f"[deploy] RAI policy '{policy_basename}' content filters synced to {account_name}",
+                file=sys.stderr,
+            )
+            return True
+    except urllib.error.HTTPError as exc:
+        err_body = exc.read()
+        print(
+            f"[deploy] Warning: ARM PUT raiPolicies/{policy_basename} returned {exc.code}: "
+            f"{err_body[:200].decode(errors='replace')}",
+            file=sys.stderr,
+        )
+        return False
+    except Exception as exc:
+        print(f"[deploy] Warning: could not sync RAI policy to ARM: {exc}", file=sys.stderr)
+        return False
+
+
 def deploy_agent(agent_name: str, environment: str, version: str | None) -> dict:
     from azure.ai.projects import AIProjectClient
     from azure.ai.projects.models import AzureAISearchTool
@@ -153,6 +214,17 @@ def deploy_agent(agent_name: str, environment: str, version: str | None) -> dict
     print(f"[deploy] Target endpoint: {endpoint}", file=sys.stderr)
     credential = DefaultAzureCredential()
     client = AIProjectClient(endpoint=endpoint, credential=credential)
+
+    # --- Sync RAI content filter policy to target environment via ARM ---
+    # If the guardrail config contains contentFilters (exported from Dev via ARM), PUT them
+    # to the target account so the policy exists with the correct thresholds before the agent
+    # version is created.
+    if guardrail_cfg.get("contentFilters") and foundry_resource_id:
+        print(
+            f"[deploy] Syncing content filters for RAI policy '{rai_policy_basename}' to {environment}...",
+            file=sys.stderr,
+        )
+        ensure_rai_policy_in_arm(credential, foundry_resource_id, guardrail_cfg)
 
     # --- Build tool list: AI Search for knowledge grounding ---
     tools: list = []
