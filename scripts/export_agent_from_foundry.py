@@ -230,7 +230,9 @@ def derive_attached_resources(bundle: dict) -> dict:
             "outputPolicies": output_policies,
         }
         if rai_policy_name:
-            guardrail_payload["raiPolicyName"] = rai_policy_name
+            # Store only the basename so the deployer can resolve it against any
+            # target environment's Foundry account (dev, qa, prod) at deployment time.
+            guardrail_payload["raiPolicyName"] = basename_from_resource_id(rai_policy_name) or rai_policy_name
         attached["guardrail"] = guardrail_payload
 
     if tools:

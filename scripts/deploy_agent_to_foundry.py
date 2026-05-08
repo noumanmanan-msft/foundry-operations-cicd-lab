@@ -117,8 +117,20 @@ def deploy_agent(agent_name: str, environment: str, version: str | None) -> dict
     index_cfg = maybe_load_json(repo_root, agent_def.get("knowledgeIndexRef"))
     memory_cfg = maybe_load_json(repo_root, agent_def.get("memoryRef"))
 
+    # Build the environment-specific RAI policy resource path from the guardrail basename.
+    # The guardrail JSON stores only the policy name (e.g. "Base-Guardrails-v1") so the
+    # deployer can resolve it against whichever account it is deploying to.
+    rai_policy_basename = guardrail_cfg.get("raiPolicyName") if guardrail_cfg else None
+    foundry_resource_id = config["foundry"].get("resourceId", "")
+    rai_policy_name: str | None = (
+        f"{foundry_resource_id}/raiPolicies/{rai_policy_basename}"
+        if rai_policy_basename and foundry_resource_id
+        else None
+    )
+
     print(
         f"[deploy] Assets loaded — model={model_cfg.get('name', model_deployment)}, "
+        f"guardrail={rai_policy_basename or 'none'}, "
         f"index={index_cfg.get('name', 'none')}, memory={memory_cfg.get('name', 'none')}",
         file=sys.stderr,
     )
@@ -189,6 +201,11 @@ def deploy_agent(agent_name: str, environment: str, version: str | None) -> dict
     }
     if tool_resources:
         definition["tool_resources"] = tool_resources
+    if rai_policy_name:
+        definition["rai_config"] = {"rai_policy_name": rai_policy_name}
+        print(f"[deploy] Applying guardrail RAI policy: {rai_policy_name}", file=sys.stderr)
+    else:
+        print("[deploy] Warning: no guardrailRef found — agent will deploy without RAI policy.", file=sys.stderr)
 
     create_version_fn = getattr(client.agents, "create_version", None)
 
