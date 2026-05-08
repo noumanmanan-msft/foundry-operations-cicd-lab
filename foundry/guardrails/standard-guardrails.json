@@ -9,5 +9,136 @@
     "require-grounding-for-environment-claims",
     "require-escalation-when-confidence-low"
   ],
-  "raiPolicyName": "Base-Guardrails-v1"
+  "raiPolicyName": "Base-Guardrails-v1",
+  "contentFilters": [
+    {
+      "name": "Hate",
+      "severityThreshold": "Medium",
+      "blocking": true,
+      "enabled": true,
+      "source": "Prompt",
+      "action": "NONE"
+    },
+    {
+      "name": "Hate",
+      "severityThreshold": "Medium",
+      "blocking": true,
+      "enabled": true,
+      "source": "Completion",
+      "action": "NONE"
+    },
+    {
+      "name": "Sexual",
+      "severityThreshold": "Medium",
+      "blocking": true,
+      "enabled": true,
+      "source": "Prompt",
+      "action": "NONE"
+    },
+    {
+      "name": "Sexual",
+      "severityThreshold": "Medium",
+      "blocking": true,
+      "enabled": true,
+      "source": "Completion",
+      "action": "NONE"
+    },
+    {
+      "name": "Violence",
+      "severityThreshold": "Medium",
+      "blocking": true,
+      "enabled": true,
+      "source": "Prompt",
+      "action": "NONE"
+    },
+    {
+      "name": "Violence",
+      "severityThreshold": "Medium",
+      "blocking": true,
+      "enabled": true,
+      "source": "Completion",
+      "action": "NONE"
+    },
+    {
+      "name": "Protected Material Code",
+      "blocking": true,
+      "enabled": true,
+      "source": "Completion",
+      "action": "NONE"
+    },
+    {
+      "name": "Purview",
+      "blocking": true,
+      "enabled": true,
+      "source": "Prompt",
+      "action": "NONE"
+    },
+    {
+      "name": "Purview",
+      "blocking": true,
+      "enabled": true,
+      "source": "Completion",
+      "action": "NONE"
+    },
+    {
+      "name": "Jailbreak",
+      "blocking": true,
+      "enabled": true,
+      "source": "Prompt",
+      "action": "NONE"
+    },
+    {
+      "name": "Indirect Attack",
+      "blocking": true,
+      "enabled": true,
+      "source": "Prompt",
+      "action": "NONE"
+    },
+    {
+      "name": "Indirect Attack",
+      "blocking": true,
+      "enabled": true,
+      "source": "PostToolCall",
+      "action": "NONE"
+    },
+    {
+      "name": "Selfharm",
+      "severityThreshold": "Medium",
+      "blocking": true,
+      "enabled": true,
+      "source": "Prompt",
+      "action": "NONE"
+    },
+    {
+      "name": "Selfharm",
+      "severityThreshold": "Medium",
+      "blocking": true,
+      "enabled": true,
+      "source": "Completion",
+      "action": "NONE"
+    },
+    {
+      "name": "Protected Material Text",
+      "blocking": false,
+      "enabled": true,
+      "source": "PreToolCall",
+      "action": "NONE"
+    },
+    {
+      "name": "Protected Material Text",
+      "blocking": false,
+      "enabled": true,
+      "source": "Completion",
+      "action": "NONE"
+    },
+    {
+      "name": "Indirect Attack Spotlighting",
+      "blocking": false,
+      "enabled": false,
+      "source": "Prompt",
+      "action": "NONE"
+    }
+  ],
+  "mode": "Default",
+  "basePolicyName": "Microsoft.DefaultV2"
 }
