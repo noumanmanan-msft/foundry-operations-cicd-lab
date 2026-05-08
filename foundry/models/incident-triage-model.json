@@ -1,14 +1,6 @@
 {
   "name": "incident-triage-model",
   "type": "modelDeployment",
-  "modelFamily": "gpt-4.1-mini",
-  "deploymentMode": "managed",
-  "capabilities": [
-    "chat",
-    "tool-calling",
-    "grounded-generation"
-  ],
-  "promotion": {
-    "strategy": "same-asset-different-config"
-  }
+  "deploymentName": "gpt-4.1-mini-ops-dev",
+  "modelFamily": "gpt-4.1-mini"
 }

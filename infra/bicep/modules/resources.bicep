@@ -36,6 +36,7 @@ var logAnalyticsWorkspaceName = 'law-${environmentName}-foundry-oplab-${location
 var appInsightsName = 'appi-${environmentName}-foundry-oplab-${locationAbbr}'
 var containerAppsEnvironmentName = 'cae-${environmentName}-foundry-oplab-${locationAbbr}'
 var aiSearchName = 'srch-${environmentName}-foundry-oplab-${locationAbbr}'
+var aiSearchIndexName = 'default'
 var managedIdentityName = 'id-${environmentName}-foundry-oplab-${locationAbbr}'
 
 // ---------------------------------------------------------------------------
@@ -189,6 +190,68 @@ resource aiSearch 'Microsoft.Search/searchServices@2024-03-01-preview' = {
   tags: tags
 }
 
+// Creates or updates the Azure AI Search index required by Foundry grounding.
+resource aiSearchDefaultIndex 'Microsoft.Resources/deploymentScripts@2023-08-01' = {
+  name: 'create-default-search-index-${environmentName}'
+  location: location
+  kind: 'AzureCLI'
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${managedIdentity.id}': {}
+    }
+  }
+  properties: {
+    azCliVersion: '2.64.0'
+    timeout: 'PT10M'
+    retentionInterval: 'P1D'
+    cleanupPreference: 'OnSuccess'
+    environmentVariables: [
+      {
+        name: 'SEARCH_ENDPOINT'
+        value: 'https://${aiSearch.name}.search.windows.net'
+      }
+      {
+        name: 'SEARCH_INDEX_NAME'
+        value: aiSearchIndexName
+      }
+      {
+        name: 'SEARCH_ADMIN_KEY'
+        secureValue: aiSearch.listAdminKeys().primaryKey
+      }
+    ]
+    scriptContent: '''
+set -euo pipefail
+
+payload=$(cat <<JSON
+{
+  "name": "${SEARCH_INDEX_NAME}",
+  "fields": [
+    {
+      "name": "id",
+      "type": "Edm.String",
+      "key": true,
+      "searchable": false,
+      "filterable": true,
+      "sortable": false,
+      "facetable": false
+    }
+  ]
+}
+JSON
+)
+
+curl -sS -f -X PUT "${SEARCH_ENDPOINT}/indexes/${SEARCH_INDEX_NAME}?api-version=2024-07-01" \
+  -H "Content-Type: application/json" \
+  -H "api-key: ${SEARCH_ADMIN_KEY}" \
+  --data "${payload}"
+
+echo "Created or updated Azure AI Search index: ${SEARCH_INDEX_NAME}"
+'''
+  }
+  tags: tags
+}
+
 // =============================================================================
 // Azure AI Foundry (new model) + Foundry Project
 // =============================================================================
@@ -319,3 +382,4 @@ output containerRegistryLoginServer string = containerRegistry.properties.loginS
 output containerAppsEnvironmentId string = containerAppsEnvironment.id
 output keyVaultUri string = keyVault.properties.vaultUri
 output aiSearchEndpoint string = 'https://${aiSearch.name}.search.windows.net'
+output aiSearchIndexName string = aiSearchIndexName

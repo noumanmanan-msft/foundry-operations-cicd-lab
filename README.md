@@ -139,6 +139,42 @@ az deployment sub create \
   --parameters infra/bicep/parameters/prod.bicepparam
 ```
 
+### 4.1 Azure AI Search index bootstrap behavior
+
+The Bicep module includes code to create an Azure AI Search index named `default` in each environment as part of deployment.
+
+- Implementation location: `infra/bicep/modules/resources.bicep` resource `aiSearchDefaultIndex` (`Microsoft.Resources/deploymentScripts`)
+- Output surface: `aiSearchIndexName` from `infra/bicep/main.bicep`
+
+Verify index existence after each deployment:
+
+```bash
+SEARCH_SERVICE=srch-dev-foundry-oplab-eus2
+RG=rg-dev-foundry-operation-lab-eastus2
+ADMIN_KEY=$(az search admin-key show --service-name "$SEARCH_SERVICE" --resource-group "$RG" --query primaryKey -o tsv)
+az rest --method get \
+  --url "https://${SEARCH_SERVICE}.search.windows.net/indexes/default?api-version=2024-07-01" \
+  --headers "api-key=${ADMIN_KEY}" \
+  --output json
+```
+
+If your organization blocks shared-key auth on the storage account used by deployment scripts, deployments can fail with `KeyBasedAuthenticationNotPermitted` during index bootstrap.
+In that case, create the same index directly with CLI and continue:
+
+```bash
+SEARCH_SERVICE=srch-qa-foundry-oplab-eus2
+RG=rg-qa-foundry-operation-lab-eastus2
+ADMIN_KEY=$(az search admin-key show --service-name "$SEARCH_SERVICE" --resource-group "$RG" --query primaryKey -o tsv)
+
+BODY='{"name":"default","fields":[{"name":"id","type":"Edm.String","key":true,"searchable":false,"filterable":true,"sortable":false,"facetable":false}]}'
+
+az rest --method put \
+  --url "https://${SEARCH_SERVICE}.search.windows.net/indexes/default?api-version=2024-07-01" \
+  --headers "Content-Type=application/json" "api-key=${ADMIN_KEY}" \
+  --body "$BODY" \
+  --output json
+```
+
 ## 5. Once Resources Are Created Through Bicep: Next Steps
 
 ### 5.0 Branching policy (required)
@@ -312,7 +348,22 @@ az resource list --resource-group rg-qa-foundry-operation-lab-eastus2 --output t
 az resource list --resource-group rg-prod-foundry-operation-lab-eastus2 --output table
 ```
 
-### 9.8 Start operationalization phase
+### 9.8 Verify default search index (all environments)
+
+```bash
+for env in dev qa prod; do
+  SEARCH_SERVICE="srch-${env}-foundry-oplab-eus2"
+  RG="rg-${env}-foundry-operation-lab-eastus2"
+  ADMIN_KEY=$(az search admin-key show --service-name "$SEARCH_SERVICE" --resource-group "$RG" --query primaryKey -o tsv)
+  echo "Checking ${env}..."
+  az rest --method get \
+    --url "https://${SEARCH_SERVICE}.search.windows.net/indexes/default?api-version=2024-07-01" \
+    --headers "api-key=${ADMIN_KEY}" \
+    --query "name" -o tsv
+done
+```
+
+### 9.9 Start operationalization phase
 
 After infra verification succeeds in all three environments:
 

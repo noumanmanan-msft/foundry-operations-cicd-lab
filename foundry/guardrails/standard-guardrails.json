@@ -1,5 +1,5 @@
 {
-  "name": "standard-guardrails",
+  "name": "Base-Guardrails-v1",
   "inputPolicies": [
     "block-secrets-in-chat",
     "block-credential-exfiltration",
@@ -9,7 +9,5 @@
     "require-grounding-for-environment-claims",
     "require-escalation-when-confidence-low"
   ],
-  "contentSafety": {
-    "mode": "enterprise-default"
-  }
+  "raiPolicyName": "/subscriptions/561c41c9-f3ec-4ad6-977a-ab33f0b43a6a/resourceGroups/rg-dev-foundry-operation-lab-eastus2/providers/Microsoft.CognitiveServices/accounts/aif-dev-foundry-operation-eastus2/raiPolicies/Base-Guardrails-v1"
 }
