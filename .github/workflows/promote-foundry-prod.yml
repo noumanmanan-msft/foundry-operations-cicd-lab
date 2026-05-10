@@ -72,3 +72,34 @@ jobs:
             --agent-name "${{ github.event_name == 'workflow_dispatch' && inputs['agent-name'] || 'incident-triage-hosted' }}" \
             --environment "prod" \
             --version "${{ github.event_name == 'workflow_dispatch' && inputs['agent-version'] || github.event.workflow_run.head_sha }}"
+
+      - name: Verify promoted MCP wiring (Prod)
+        env:
+          AGENT_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs['agent-name'] || 'incident-triage-hosted' }}
+        run: |
+          set -euo pipefail
+          python scripts/export_agent_from_foundry.py \
+            --agent-name "$AGENT_NAME" \
+            --environment prod \
+            --output .dist/prod-live-export.json
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          payload = json.loads(Path('.dist/prod-live-export.json').read_text())
+          tools = (payload.get('agent', {}) or {}).get('tools') or []
+          mcp_tool = next((t for t in tools if (t.get('type') or '').lower() == 'mcp'), None)
+          if not mcp_tool:
+              raise SystemExit('No MCP tool attached after Prod promotion.')
+
+          conn_name = (mcp_tool.get('project_connection_id') or '').strip()
+          if not conn_name.endswith('-prod'):
+              raise SystemExit(f"Prod MCP connection is not environment-scoped: '{conn_name}'")
+
+          server_url = (mcp_tool.get('server_url') or '').strip()
+          if 'srch-prod-' not in server_url:
+              raise SystemExit(f"Prod MCP server_url does not target Prod search endpoint: '{server_url}'")
+
+          print(f"Prod promotion wiring verified: connection={conn_name}")
+          PY

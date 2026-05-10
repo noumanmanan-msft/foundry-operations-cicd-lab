@@ -118,6 +118,46 @@ def basename_from_resource_id(resource_id: str | None) -> str | None:
     return resource_id.rstrip("/").split("/")[-1]
 
 
+def normalize_kb_metadata_for_repo(payload: dict | None) -> dict | None:
+    """Strip environment-specific values and persist portable metadata templates.
+
+    Export payloads can contain absolute connection IDs and concrete endpoint URLs
+    from the source environment (typically Dev). Those values are not portable
+    across QA/Prod, so we normalize them before writing foundry/ JSON files.
+    """
+    if not payload:
+        return payload
+
+    normalized = {k: v for k, v in payload.items() if v is not None}
+
+    connection_name = basename_from_resource_id(normalized.pop("connectionId", None))
+
+    project_connection_id = normalized.get("projectConnectionId") or connection_name
+    if project_connection_id:
+        normalized["projectConnectionId"] = project_connection_id
+
+    knowledge_base_name = (
+        normalized.get("knowledgeBaseName")
+        or normalized.get("indexName")
+        or normalized.get("name")
+        or ""
+    ).strip()
+
+    normalized.pop("mcpServerUrl", None)
+
+    if knowledge_base_name:
+        normalized.setdefault("knowledgeBaseName", knowledge_base_name)
+        normalized.setdefault("projectConnectionPrefix", f"kb-{knowledge_base_name}-")
+        normalized.setdefault("projectConnectionNameTemplate", f"kb-{knowledge_base_name}-{{environment}}")
+        normalized.setdefault(
+            "mcpServerUrlTemplate",
+            f"https://{{searchEndpointHost}}/knowledgebases/{knowledge_base_name}/mcp?api-version=2025-11-01-Preview",
+        )
+        normalized.setdefault("mcpServerLabel", f"kb_{knowledge_base_name}".replace("-", "_"))
+
+    return normalized
+
+
 def collect_candidate_values(obj: Any, candidate_keys: set[str]) -> dict[str, list[Any]]:
     found: dict[str, list[Any]] = {key: [] for key in candidate_keys}
 
@@ -480,11 +520,12 @@ def sync_agent_bundle_to_repo(bundle: dict, repo_root: Path) -> dict:
         knowledge_ref = choose_ref(existing_agent, "knowledgeIndexRef", f"foundry/indexes/{default_slug}-knowledge-index.json")
         knowledge_file = repo_root / knowledge_ref
         existing_knowledge_index = load_json(knowledge_file) if knowledge_file.exists() else {}
+        normalized_knowledge_index = normalize_kb_metadata_for_repo(attached["knowledgeIndex"]) or {}
         merged_knowledge_index = dict(existing_knowledge_index)
-        merged_knowledge_index.update({k: v for k, v in attached["knowledgeIndex"].items() if v is not None})
-        if isinstance(existing_knowledge_index.get("retrieval"), dict) or isinstance(attached["knowledgeIndex"].get("retrieval"), dict):
+        merged_knowledge_index.update({k: v for k, v in normalized_knowledge_index.items() if v is not None})
+        if isinstance(existing_knowledge_index.get("retrieval"), dict) or isinstance(normalized_knowledge_index.get("retrieval"), dict):
             merged_retrieval = dict(existing_knowledge_index.get("retrieval", {}))
-            merged_retrieval.update(attached["knowledgeIndex"].get("retrieval", {}))
+            merged_retrieval.update(normalized_knowledge_index.get("retrieval", {}))
             merged_knowledge_index["retrieval"] = merged_retrieval
         write_json(knowledge_file, merged_knowledge_index)
         synced_agent["knowledgeIndexRef"] = knowledge_ref
@@ -495,7 +536,7 @@ def sync_agent_bundle_to_repo(bundle: dict, repo_root: Path) -> dict:
     if attached["knowledge"]:
         knowledge_ref = choose_ref(existing_agent, "knowledgeRef", f"foundry/knowledge/{default_slug}-knowledge.json")
         knowledge_file = repo_root / knowledge_ref
-        knowledge_payload = dict(attached["knowledge"])
+        knowledge_payload = normalize_kb_metadata_for_repo(attached["knowledge"]) or {}
         knowledge_payload["indexRef"] = synced_agent.get("knowledgeIndexRef", "")
         write_json(knowledge_file, knowledge_payload)
         synced_agent["knowledgeRef"] = knowledge_ref
@@ -506,7 +547,7 @@ def sync_agent_bundle_to_repo(bundle: dict, repo_root: Path) -> dict:
     if attached["foundryIq"]:
         foundry_iq_ref = choose_ref(existing_agent, "foundryIqRef", f"foundry/foundry-iq/{default_slug}-foundry-iq.json")
         foundry_iq_file = repo_root / foundry_iq_ref
-        foundry_iq_payload = dict(attached["foundryIq"])
+        foundry_iq_payload = normalize_kb_metadata_for_repo(attached["foundryIq"]) or {}
         foundry_iq_payload["indexRef"] = synced_agent.get("knowledgeIndexRef", "")
         foundry_iq_payload["knowledgeRef"] = synced_agent.get("knowledgeRef", "")
         write_json(foundry_iq_file, foundry_iq_payload)

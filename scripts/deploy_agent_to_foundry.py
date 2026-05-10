@@ -44,6 +44,17 @@ def maybe_load_json(repo_root: Path, path_str: str | None) -> dict:
     return load_json(repo_root / path_str)
 
 
+def render_template(template: str, values: dict[str, str]) -> str:
+    rendered = template
+    for key, value in values.items():
+        rendered = rendered.replace(f"{{{key}}}", value)
+    return rendered
+
+
+def endpoint_host(endpoint: str) -> str:
+    return endpoint.replace("https://", "").replace("http://", "").strip().rstrip("/")
+
+
 def resolve_index_config(repo_root: Path, agent_def: dict) -> tuple[dict, dict, dict]:
     """Resolve index metadata from legacy and new refs.
 
@@ -282,18 +293,68 @@ def deploy_agent(agent_name: str, environment: str, version: str | None) -> dict
     tool_resources = None
 
     knowledge_base_name = (foundry_iq_cfg.get("knowledgeBaseName") or knowledge_cfg.get("knowledgeBaseName") or "").strip()
-    project_connection_id = (foundry_iq_cfg.get("projectConnectionId") or "").strip()
+    project_connection_id = (
+        foundry_iq_cfg.get("projectConnectionId")
+        or knowledge_cfg.get("projectConnectionId")
+        or index_cfg.get("projectConnectionId")
+        or ""
+    ).strip()
+    project_connection_template = (
+        foundry_iq_cfg.get("projectConnectionNameTemplate")
+        or knowledge_cfg.get("projectConnectionNameTemplate")
+        or index_cfg.get("projectConnectionNameTemplate")
+        or ""
+    ).strip()
+    project_connection_prefix = (
+        foundry_iq_cfg.get("projectConnectionPrefix")
+        or knowledge_cfg.get("projectConnectionPrefix")
+        or index_cfg.get("projectConnectionPrefix")
+        or ""
+    ).strip()
+    mcp_server_url_template = (
+        foundry_iq_cfg.get("mcpServerUrlTemplate")
+        or knowledge_cfg.get("mcpServerUrlTemplate")
+        or index_cfg.get("mcpServerUrlTemplate")
+        or ""
+    ).strip()
 
     if knowledge_base_name:
-        prefix = f"kb-{knowledge_base_name}-"
-        kb_conn = find_connection_by_name_or_prefix(client.connections, project_connection_id or None, prefix)
+        prefix = project_connection_prefix or f"kb-{knowledge_base_name}-"
+
+        expected_connection_name = ""
+        if project_connection_template:
+            expected_connection_name = render_template(
+                project_connection_template,
+                {
+                    "environment": environment,
+                    "knowledgeBaseName": knowledge_base_name,
+                },
+            )
+
+        kb_conn = None
+        if expected_connection_name:
+            kb_conn = find_connection_by_name_or_prefix(client.connections, expected_connection_name, None)
+        if kb_conn is None:
+            kb_conn = find_connection_by_name_or_prefix(client.connections, project_connection_id or None, prefix)
+
         search_endpoint = ((config.get("knowledge") or {}).get("searchEndpoint") or "").rstrip("/")
         if kb_conn and search_endpoint:
             kb_conn_name = getattr(kb_conn, "name", project_connection_id)
-            kb_server_url = (
-                f"{search_endpoint}/knowledgebases/{knowledge_base_name}/mcp"
-                "?api-version=2025-11-01-Preview"
-            )
+            if mcp_server_url_template:
+                kb_server_url = render_template(
+                    mcp_server_url_template,
+                    {
+                        "searchEndpoint": search_endpoint,
+                        "searchEndpointHost": endpoint_host(search_endpoint),
+                        "knowledgeBaseName": knowledge_base_name,
+                        "environment": environment,
+                    },
+                )
+            else:
+                kb_server_url = (
+                    f"{search_endpoint}/knowledgebases/{knowledge_base_name}/mcp"
+                    "?api-version=2025-11-01-Preview"
+                )
             tools = [
                 {
                     "type": "mcp",

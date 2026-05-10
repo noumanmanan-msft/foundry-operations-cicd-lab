@@ -61,11 +61,52 @@ def validate_prompt_files(repo_root: Path):
             raise ValueError(f"Prompt file is empty: {prompt_path}")
 
 
+def validate_portable_knowledge_metadata(repo_root: Path):
+    """Ensure promoted knowledge metadata is environment-agnostic.
+
+    Dev exports can include concrete ARM resource IDs and endpoint URLs. Those are
+    not portable across QA/Prod and must be represented as templates or inferred
+    from target environment config at deployment time.
+    """
+    check_roots = [
+        repo_root / "foundry" / "indexes",
+        repo_root / "foundry" / "knowledge",
+        repo_root / "foundry" / "foundry-iq",
+    ]
+
+    for root in check_roots:
+        if not root.exists():
+            continue
+        for path in sorted(root.rglob("*.json")):
+            payload = load_json(path)
+
+            connection_id = payload.get("connectionId")
+            if isinstance(connection_id, str) and connection_id.strip().startswith("/"):
+                raise ValueError(
+                    f"Non-portable connectionId (ARM resource ID) found in {path}. "
+                    "Use projectConnectionId/projectConnectionNameTemplate instead."
+                )
+
+            mcp_server_url = payload.get("mcpServerUrl")
+            if isinstance(mcp_server_url, str) and ".search.windows.net" in mcp_server_url:
+                raise ValueError(
+                    f"Non-portable mcpServerUrl found in {path}. "
+                    "Use mcpServerUrlTemplate with {searchEndpointHost}."
+                )
+
+            name_template = payload.get("projectConnectionNameTemplate")
+            if name_template is not None and "{environment}" not in str(name_template):
+                raise ValueError(
+                    f"projectConnectionNameTemplate must contain '{{environment}}' in {path}."
+                )
+
+
 def main():
     repo_root = Path(__file__).resolve().parents[1]
     validate_environment_configs(repo_root)
     validate_refs(repo_root)
     validate_prompt_files(repo_root)
+    validate_portable_knowledge_metadata(repo_root)
     print("Foundry asset validation passed")
 
 
