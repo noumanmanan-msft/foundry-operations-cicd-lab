@@ -29,6 +29,9 @@ import argparse
 import json
 import re
 import sys
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -180,6 +183,185 @@ def first_string(values: list[Any]) -> str | None:
         if isinstance(value, str) and value.strip():
             return value.strip()
     return None
+
+
+def parse_kb_name_from_mcp_url(value: str | None) -> str | None:
+    if not isinstance(value, str):
+        return None
+    match = re.search(r"/knowledgebases/([^/]+)/mcp", value)
+    if not match:
+        return None
+    return match.group(1)
+
+
+def get_search_endpoint_from_mcp_url(value: str | None) -> str | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = urllib.parse.urlparse(value)
+        if parsed.scheme and parsed.netloc:
+            return f"{parsed.scheme}://{parsed.netloc}"
+    except Exception:
+        return None
+    return None
+
+
+def fetch_search_knowledgebase(credential, search_endpoint: str, knowledge_base_name: str) -> dict | None:
+    """Fetch a knowledgebase definition from Azure AI Search data-plane."""
+    if not (search_endpoint and knowledge_base_name):
+        return None
+
+    try:
+        token = credential.get_token("https://search.azure.com/.default")
+    except Exception as exc:
+        print(f"[export] Warning: could not acquire Search token: {exc}", file=sys.stderr)
+        return None
+
+    url = (
+        f"{search_endpoint.rstrip('/')}/knowledgebases/{knowledge_base_name}"
+        "?api-version=2025-11-01-Preview"
+    )
+    req = urllib.request.Request(url)
+    req.add_header("Authorization", f"Bearer {token.token}")
+    req.add_header("Accept", "application/json")
+
+    try:
+        with urllib.request.urlopen(req) as resp:
+            payload = json.loads(resp.read())
+            print(
+                f"[export] Captured knowledgebase '{knowledge_base_name}' from Search endpoint {search_endpoint}",
+                file=sys.stderr,
+            )
+            return payload
+    except urllib.error.HTTPError as exc:
+        print(
+            f"[export] Warning: Search GET knowledgebases/{knowledge_base_name} returned {exc.code}",
+            file=sys.stderr,
+        )
+        return None
+    except Exception as exc:
+        print(f"[export] Warning: could not fetch knowledgebase '{knowledge_base_name}': {exc}", file=sys.stderr)
+        return None
+
+
+def fetch_search_knowledge_source(credential, search_endpoint: str, source_name: str) -> dict | None:
+    """Fetch a knowledge source definition from Azure AI Search data-plane."""
+    if not (search_endpoint and source_name):
+        return None
+
+    try:
+        token = credential.get_token("https://search.azure.com/.default")
+    except Exception as exc:
+        print(f"[export] Warning: could not acquire Search token: {exc}", file=sys.stderr)
+        return None
+
+    url = (
+        f"{search_endpoint.rstrip('/')}/knowledgeSources/{source_name}"
+        "?api-version=2025-11-01-Preview"
+    )
+    req = urllib.request.Request(url)
+    req.add_header("Authorization", f"Bearer {token.token}")
+    req.add_header("Accept", "application/json")
+
+    try:
+        with urllib.request.urlopen(req) as resp:
+            payload = json.loads(resp.read())
+            print(
+                f"[export] Captured knowledge source '{source_name}' from Search endpoint {search_endpoint}",
+                file=sys.stderr,
+            )
+            return payload
+    except urllib.error.HTTPError as exc:
+        print(
+            f"[export] Warning: Search GET knowledgeSources/{source_name} returned {exc.code}",
+            file=sys.stderr,
+        )
+        return None
+    except Exception as exc:
+        print(f"[export] Warning: could not fetch knowledge source '{source_name}': {exc}", file=sys.stderr)
+        return None
+
+
+def collect_knowledgebase_snapshots(credential, bundle: dict, config: dict) -> list[dict]:
+    """Capture all knowledgebase objects referenced by the agent and kb MCP connections."""
+    snapshots: list[dict] = []
+    knowledge_sources: dict[str, dict] = {}
+
+    tools = ((bundle.get("agent") or {}).get("tools") or [])
+    connections = bundle.get("connections") or []
+    default_search_endpoint = ((config.get("knowledge") or {}).get("searchEndpoint") or "").rstrip("/")
+
+    candidates: dict[str, dict[str, str]] = {}
+
+    for tool in tools:
+        payload = safe_as_dict(tool) or {}
+        if (payload.get("type") or "").lower() != "mcp":
+            continue
+        server_url = payload.get("server_url")
+        kb_name = parse_kb_name_from_mcp_url(server_url)
+        if not kb_name:
+            continue
+        candidates[kb_name] = {
+            "searchEndpoint": get_search_endpoint_from_mcp_url(server_url) or default_search_endpoint,
+            "connectionName": (payload.get("project_connection_id") or "").strip(),
+            "serverUrl": server_url,
+        }
+
+    for conn in connections:
+        target = conn.get("target")
+        kb_name = parse_kb_name_from_mcp_url(target)
+        if not kb_name:
+            continue
+        meta = conn.get("metadata") or {}
+        if isinstance(meta.get("knowledgeBaseName"), str) and meta.get("knowledgeBaseName").strip():
+            kb_name = meta["knowledgeBaseName"].strip()
+
+        candidates.setdefault(
+            kb_name,
+            {
+                "searchEndpoint": get_search_endpoint_from_mcp_url(target) or default_search_endpoint,
+                "connectionName": (conn.get("name") or "").strip(),
+                "serverUrl": target,
+            },
+        )
+
+    for kb_name, details in sorted(candidates.items()):
+        search_endpoint = (details.get("searchEndpoint") or default_search_endpoint or "").rstrip("/")
+        kb_payload = fetch_search_knowledgebase(credential, search_endpoint, kb_name)
+        if not kb_payload:
+            continue
+
+        source_refs = []
+        for src in kb_payload.get("knowledgeSources") or []:
+            src_name = (src.get("name") or "").strip() if isinstance(src, dict) else ""
+            if not src_name:
+                continue
+            source_refs.append(src_name)
+            if src_name not in knowledge_sources:
+                src_payload = fetch_search_knowledge_source(credential, search_endpoint, src_name)
+                if src_payload:
+                    knowledge_sources[src_name] = src_payload
+
+        snapshots.append(
+            {
+                "name": kb_name,
+                "searchEndpoint": search_endpoint,
+                "projectConnectionId": details.get("connectionName") or "",
+                "mcpServerUrl": details.get("serverUrl") or "",
+                "knowledgeSourceNames": source_refs,
+                "definition": kb_payload,
+            }
+        )
+
+    return [
+        {
+            "knowledgeBases": snapshots,
+            "knowledgeSources": [
+                {"name": name, "definition": definition}
+                for name, definition in sorted(knowledge_sources.items())
+            ],
+        }
+    ][0]
 
 
 def extract_search_attachment(tools: list[dict[str, Any]], tool_resources: dict[str, Any], connections: list[dict[str, str]]) -> dict | None:
@@ -441,6 +623,23 @@ def sync_agent_bundle_to_repo(bundle: dict, repo_root: Path) -> dict:
     agent_fields = bundle["agent"]
     agent_name = agent_fields["name"]
     attached = bundle["attachedResources"]
+    knowledge_sources = bundle.get("knowledgeSources") or []
+
+    knowledge_source_refs: dict[str, str] = {}
+    for source in knowledge_sources:
+        src_name = (source.get("name") or "").strip()
+        src_definition = source.get("definition") or {}
+        if not src_name or not isinstance(src_definition, dict) or not src_definition:
+            continue
+        src_ref = f"foundry/knowledge-sources/{src_name}.json"
+        src_file = repo_root / src_ref
+        src_payload = {
+            "name": src_name,
+            "description": "Knowledge source definition exported from Dev Azure AI Search.",
+            "definition": src_definition,
+        }
+        write_json(src_file, src_payload)
+        knowledge_source_refs[src_name] = src_ref
 
     agent_file = find_repo_agent_file(repo_root, agent_name)
     if agent_file is None:
@@ -451,6 +650,9 @@ def sync_agent_bundle_to_repo(bundle: dict, repo_root: Path) -> dict:
 
     default_slug = agent_name.replace("_", "-")
     synced_files: dict[str, str] = {}
+
+    for src_name, src_ref in sorted(knowledge_source_refs.items()):
+        synced_files[f"knowledgeSource:{src_name}"] = src_ref
 
     synced_agent = dict(existing_agent) if existing_agent else {}
     synced_agent["name"] = agent_name
@@ -550,6 +752,34 @@ def sync_agent_bundle_to_repo(bundle: dict, repo_root: Path) -> dict:
         foundry_iq_payload = normalize_kb_metadata_for_repo(attached["foundryIq"]) or {}
         foundry_iq_payload["indexRef"] = synced_agent.get("knowledgeIndexRef", "")
         foundry_iq_payload["knowledgeRef"] = synced_agent.get("knowledgeRef", "")
+
+        kb_snaps = bundle.get("knowledgeBases") or []
+        kb_name = (foundry_iq_payload.get("knowledgeBaseName") or "").strip()
+        if kb_name:
+            kb_match = next((k for k in kb_snaps if (k.get("name") or "").strip() == kb_name), None)
+            if kb_match:
+                kb_ref = f"foundry/knowledgebases/{kb_name}.json"
+                kb_file = repo_root / kb_ref
+                kb_repo_payload = {
+                    "name": kb_name,
+                    "description": "Knowledgebase definition exported from Dev Azure AI Search.",
+                    "projectConnectionId": kb_match.get("projectConnectionId") or foundry_iq_payload.get("projectConnectionId"),
+                    "projectConnectionPrefix": f"kb-{kb_name}-",
+                    "projectConnectionNameTemplate": f"kb-{kb_name}-{{environment}}",
+                    "mcpServerUrlTemplate": (
+                        f"https://{{searchEndpointHost}}/knowledgebases/{kb_name}/mcp?api-version=2025-11-01-Preview"
+                    ),
+                    "knowledgeSourceRefs": [
+                        knowledge_source_refs[name]
+                        for name in kb_match.get("knowledgeSourceNames") or []
+                        if name in knowledge_source_refs
+                    ],
+                    "definition": kb_match.get("definition") or {},
+                }
+                write_json(kb_file, kb_repo_payload)
+                synced_files["knowledgebase"] = str(kb_file.relative_to(repo_root))
+                foundry_iq_payload["knowledgeBaseRef"] = kb_ref
+
         write_json(foundry_iq_file, foundry_iq_payload)
         synced_agent["foundryIqRef"] = foundry_iq_ref
         synced_files["foundryIq"] = str(foundry_iq_file.relative_to(repo_root))
@@ -661,6 +891,9 @@ def export_agent(
                 "id": c.id,
                 "name": getattr(c, "name", ""),
                 "type": getattr(c.properties, "category", "") if hasattr(c, "properties") else "",
+                "group": getattr(c.properties, "group", "") if hasattr(c, "properties") else "",
+                "target": getattr(c.properties, "target", "") if hasattr(c, "properties") else "",
+                "metadata": safe_as_dict(getattr(c.properties, "metadata", {})) if hasattr(c, "properties") else {},
             }
             for c in client.connections.list()
         ]
@@ -681,6 +914,16 @@ def export_agent(
         arm_rai_policy = fetch_rai_policy_from_arm(credential, foundry_resource_id, rai_policy_basename)
 
     bundle["attachedResources"] = derive_attached_resources(bundle, arm_rai_policy=arm_rai_policy)
+
+    kb_capture = collect_knowledgebase_snapshots(credential, bundle, config)
+    knowledge_bases = kb_capture.get("knowledgeBases") or []
+    knowledge_sources = kb_capture.get("knowledgeSources") or []
+    if knowledge_bases:
+        bundle["knowledgeBases"] = knowledge_bases
+        print(f"[export] Captured {len(knowledge_bases)} knowledgebase definition(s)", file=sys.stderr)
+    if knowledge_sources:
+        bundle["knowledgeSources"] = knowledge_sources
+        print(f"[export] Captured {len(knowledge_sources)} knowledge source definition(s)", file=sys.stderr)
 
     result_json = json.dumps(bundle, indent=2) + "\n"
 

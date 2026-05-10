@@ -101,12 +101,54 @@ def validate_portable_knowledge_metadata(repo_root: Path):
                 )
 
 
+def validate_knowledgebase_assets(repo_root: Path):
+    kb_root = repo_root / "foundry" / "knowledgebases"
+    if not kb_root.exists():
+        return
+
+    for path in sorted(kb_root.rglob("*.json")):
+        payload = load_json(path)
+        kb_name = (payload.get("name") or "").strip()
+        definition = payload.get("definition") or {}
+        if not kb_name:
+            raise ValueError(f"Knowledgebase asset missing 'name': {path}")
+        if not isinstance(definition, dict) or not definition:
+            raise ValueError(f"Knowledgebase asset missing 'definition': {path}")
+        def_name = (definition.get("name") or "").strip()
+        if def_name and def_name != kb_name:
+            raise ValueError(
+                f"Knowledgebase asset name/definition.name mismatch in {path}: '{kb_name}' != '{def_name}'"
+            )
+
+
+def validate_knowledge_source_assets(repo_root: Path):
+    src_root = repo_root / "foundry" / "knowledge-sources"
+    if not src_root.exists():
+        return
+
+    for path in sorted(src_root.rglob("*.json")):
+        payload = load_json(path)
+        src_name = (payload.get("name") or "").strip()
+        definition = payload.get("definition") or {}
+        if not src_name:
+            raise ValueError(f"Knowledge source asset missing 'name': {path}")
+        if not isinstance(definition, dict) or not definition:
+            raise ValueError(f"Knowledge source asset missing 'definition': {path}")
+        def_name = (definition.get("name") or "").strip()
+        if def_name and def_name != src_name:
+            raise ValueError(
+                f"Knowledge source asset name/definition.name mismatch in {path}: '{src_name}' != '{def_name}'"
+            )
+
+
 def main():
     repo_root = Path(__file__).resolve().parents[1]
     validate_environment_configs(repo_root)
     validate_refs(repo_root)
     validate_prompt_files(repo_root)
     validate_portable_knowledge_metadata(repo_root)
+    validate_knowledgebase_assets(repo_root)
+    validate_knowledge_source_assets(repo_root)
     print("Foundry asset validation passed")
 
 

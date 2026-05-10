@@ -1,0 +1,25 @@
+{
+  "name": "ks-azure-ai-searchindex",
+  "description": "Knowledge source definition exported from Dev Azure AI Search.",
+  "definition": {
+    "@odata.context": "https://srch-dev-foundry-oplab-eus2.search.windows.net/$metadata#knowledgesources/$entity",
+    "@odata.etag": "\"0x8DEAEBB4739D804\"",
+    "name": "ks-azure-ai-searchindex",
+    "kind": "searchIndex",
+    "description": null,
+    "encryptionKey": null,
+    "searchIndexParameters": {
+      "searchIndexName": "default",
+      "semanticConfigurationName": null,
+      "sourceDataFields": [],
+      "searchFields": []
+    },
+    "azureBlobParameters": null,
+    "mcpToolParameters": null,
+    "fabricIQParameters": null,
+    "webParameters": null,
+    "remoteSharePointParameters": null,
+    "indexedSharePointParameters": null,
+    "indexedOneLakeParameters": null
+  }
+}

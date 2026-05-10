@@ -21,6 +21,8 @@ Prerequisites:
 import argparse
 import json
 import sys
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 
@@ -55,6 +57,108 @@ def endpoint_host(endpoint: str) -> str:
     return endpoint.replace("https://", "").replace("http://", "").strip().rstrip("/")
 
 
+def ensure_knowledgebase_in_search(credential, search_endpoint: str, knowledgebase_cfg: dict) -> bool:
+    """Create or update a Search knowledgebase in the target environment."""
+    if not search_endpoint:
+        print("[deploy] Warning: search endpoint missing; cannot sync knowledgebase.", file=sys.stderr)
+        return False
+
+    kb_definition = knowledgebase_cfg.get("definition") or {}
+    kb_name = (kb_definition.get("name") or knowledgebase_cfg.get("name") or "").strip()
+    if not kb_name:
+        print("[deploy] Warning: knowledgebase config has no name; skipping kb sync.", file=sys.stderr)
+        return False
+
+    payload = {k: v for k, v in dict(kb_definition).items() if not str(k).startswith("@odata")}
+    payload["name"] = kb_name
+
+    try:
+        token = credential.get_token("https://search.azure.com/.default")
+    except Exception as exc:
+        print(f"[deploy] Warning: could not acquire Search token for kb sync: {exc}", file=sys.stderr)
+        return False
+
+    url = (
+        f"{search_endpoint.rstrip('/')}/knowledgebases/{kb_name}"
+        "?api-version=2025-11-01-Preview"
+    )
+    body = json.dumps(payload).encode()
+    req = urllib.request.Request(url, data=body, method="PUT")
+    req.add_header("Authorization", f"Bearer {token.token}")
+    req.add_header("Content-Type", "application/json")
+    req.add_header("Accept", "application/json")
+
+    try:
+        with urllib.request.urlopen(req) as resp:
+            resp.read()
+            print(
+                f"[deploy] Knowledgebase '{kb_name}' synced to {search_endpoint}",
+                file=sys.stderr,
+            )
+            return True
+    except urllib.error.HTTPError as exc:
+        details = exc.read()[:300].decode(errors="replace")
+        print(
+            f"[deploy] Warning: Search PUT knowledgebases/{kb_name} returned {exc.code}: {details}",
+            file=sys.stderr,
+        )
+        return False
+    except Exception as exc:
+        print(f"[deploy] Warning: could not sync knowledgebase '{kb_name}': {exc}", file=sys.stderr)
+        return False
+
+
+def ensure_knowledge_source_in_search(credential, search_endpoint: str, source_cfg: dict) -> bool:
+    """Create or update a Search knowledge source in the target environment."""
+    if not search_endpoint:
+        print("[deploy] Warning: search endpoint missing; cannot sync knowledge source.", file=sys.stderr)
+        return False
+
+    src_definition = source_cfg.get("definition") or {}
+    src_name = (src_definition.get("name") or source_cfg.get("name") or "").strip()
+    if not src_name:
+        print("[deploy] Warning: knowledge source config has no name; skipping source sync.", file=sys.stderr)
+        return False
+
+    payload = {k: v for k, v in dict(src_definition).items() if not str(k).startswith("@odata")}
+    payload["name"] = src_name
+
+    try:
+        token = credential.get_token("https://search.azure.com/.default")
+    except Exception as exc:
+        print(f"[deploy] Warning: could not acquire Search token for source sync: {exc}", file=sys.stderr)
+        return False
+
+    url = (
+        f"{search_endpoint.rstrip('/')}/knowledgeSources/{src_name}"
+        "?api-version=2025-11-01-Preview"
+    )
+    body = json.dumps(payload).encode()
+    req = urllib.request.Request(url, data=body, method="PUT")
+    req.add_header("Authorization", f"Bearer {token.token}")
+    req.add_header("Content-Type", "application/json")
+    req.add_header("Accept", "application/json")
+
+    try:
+        with urllib.request.urlopen(req) as resp:
+            resp.read()
+            print(
+                f"[deploy] Knowledge source '{src_name}' synced to {search_endpoint}",
+                file=sys.stderr,
+            )
+            return True
+    except urllib.error.HTTPError as exc:
+        details = exc.read()[:300].decode(errors="replace")
+        print(
+            f"[deploy] Warning: Search PUT knowledgeSources/{src_name} returned {exc.code}: {details}",
+            file=sys.stderr,
+        )
+        return False
+    except Exception as exc:
+        print(f"[deploy] Warning: could not sync knowledge source '{src_name}': {exc}", file=sys.stderr)
+        return False
+
+
 def resolve_index_config(repo_root: Path, agent_def: dict) -> tuple[dict, dict, dict]:
     """Resolve index metadata from legacy and new refs.
 
@@ -84,6 +188,15 @@ def resolve_index_config(repo_root: Path, agent_def: dict) -> tuple[dict, dict, 
         }
 
     return index_cfg, knowledge_cfg, foundry_iq_cfg
+
+
+def resolve_knowledgebase_config(repo_root: Path, index_cfg: dict, knowledge_cfg: dict, foundry_iq_cfg: dict) -> dict:
+    kb_ref = (
+        foundry_iq_cfg.get("knowledgeBaseRef")
+        or knowledge_cfg.get("knowledgeBaseRef")
+        or index_cfg.get("knowledgeBaseRef")
+    )
+    return maybe_load_json(repo_root, kb_ref)
 
 
 def resolve_agent_file(repo_root: Path, agent_name: str) -> Path:
@@ -235,6 +348,7 @@ def deploy_agent(agent_name: str, environment: str, version: str | None) -> dict
     system_prompt = (repo_root / prompt_ref).read_text().strip() if prompt_ref else ""
     guardrail_cfg = maybe_load_json(repo_root, agent_def.get("guardrailRef"))
     index_cfg, knowledge_cfg, foundry_iq_cfg = resolve_index_config(repo_root, agent_def)
+    knowledgebase_cfg = resolve_knowledgebase_config(repo_root, index_cfg, knowledge_cfg, foundry_iq_cfg)
     memory_cfg = maybe_load_json(repo_root, agent_def.get("memoryRef"))
 
     # Build the environment-specific RAI policy resource path from the guardrail basename.
@@ -254,6 +368,7 @@ def deploy_agent(agent_name: str, environment: str, version: str | None) -> dict
         f"index={index_cfg.get('name', 'none')}, "
         f"knowledge={knowledge_cfg.get('name', 'none')}, "
         f"foundryIq={foundry_iq_cfg.get('name', 'none')}, "
+        f"knowledgebase={knowledgebase_cfg.get('name', 'none')}, "
         f"memory={memory_cfg.get('name', 'none')}",
         file=sys.stderr,
     )
@@ -291,6 +406,14 @@ def deploy_agent(agent_name: str, environment: str, version: str | None) -> dict
     # --- Build tool list: Foundry IQ MCP tool when configured, else AI Search fallback ---
     tools: list = []
     tool_resources = None
+
+    search_endpoint = ((config.get("knowledge") or {}).get("searchEndpoint") or "").rstrip("/")
+    if knowledgebase_cfg and search_endpoint:
+        for ref in knowledgebase_cfg.get("knowledgeSourceRefs") or []:
+            src_cfg = maybe_load_json(repo_root, ref)
+            if src_cfg:
+                ensure_knowledge_source_in_search(credential, search_endpoint, src_cfg)
+        ensure_knowledgebase_in_search(credential, search_endpoint, knowledgebase_cfg)
 
     knowledge_base_name = (foundry_iq_cfg.get("knowledgeBaseName") or knowledge_cfg.get("knowledgeBaseName") or "").strip()
     project_connection_id = (
@@ -337,7 +460,6 @@ def deploy_agent(agent_name: str, environment: str, version: str | None) -> dict
         if kb_conn is None:
             kb_conn = find_connection_by_name_or_prefix(client.connections, project_connection_id or None, prefix)
 
-        search_endpoint = ((config.get("knowledge") or {}).get("searchEndpoint") or "").rstrip("/")
         if kb_conn and search_endpoint:
             kb_conn_name = getattr(kb_conn, "name", project_connection_id)
             if mcp_server_url_template:
