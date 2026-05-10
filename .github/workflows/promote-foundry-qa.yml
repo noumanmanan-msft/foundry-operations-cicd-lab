@@ -85,6 +85,7 @@ jobs:
 
           python - <<'PY'
           import json
+          import os
           from pathlib import Path
 
           payload = json.loads(Path('.dist/qa-live-export.json').read_text())
@@ -102,11 +103,29 @@ jobs:
               raise SystemExit(f"QA MCP server_url does not target QA search endpoint: '{server_url}'")
 
           kb_names = [
-            (item or {}).get('name', '').strip()
-            for item in (payload.get('knowledgeBases') or [])
+              (item or {}).get('name', '').strip()
+              for item in (payload.get('knowledgeBases') or [])
           ]
           if 'kb-iq-v1' not in kb_names:
-            raise SystemExit(f"QA knowledgebase 'kb-iq-v1' not found in live export. Found: {kb_names}")
+              raise SystemExit(f"QA knowledgebase 'kb-iq-v1' not found in live export. Found: {kb_names}")
 
-          print(f"QA promotion wiring verified: connection={conn_name}; knowledgebases={kb_names}")
+          ks_names = [
+              (item or {}).get('name', '').strip()
+              for item in (payload.get('knowledgeSources') or [])
+          ]
+          if 'ks-azure-ai-searchindex' not in ks_names:
+              raise SystemExit(f"QA knowledge source 'ks-azure-ai-searchindex' not found in live export. Found: {ks_names}")
+
+          summary = [
+              '### QA Foundry IQ Verification',
+              f'- MCP connection: {conn_name}',
+              f'- MCP endpoint: {server_url}',
+              f'- Knowledge bases: {", ".join(kb_names) or "none"}',
+              f'- Knowledge sources: {", ".join(ks_names) or "none"}',
+          ]
+          step_summary = os.environ.get('GITHUB_STEP_SUMMARY')
+          if step_summary:
+              Path(step_summary).write_text("\n".join(summary) + "\n")
+
+          print(f"QA promotion wiring verified: connection={conn_name}; knowledgebases={kb_names}; knowledgesources={ks_names}")
           PY
