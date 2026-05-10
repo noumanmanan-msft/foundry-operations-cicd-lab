@@ -44,6 +44,37 @@ def maybe_load_json(repo_root: Path, path_str: str | None) -> dict:
     return load_json(repo_root / path_str)
 
 
+def resolve_index_config(repo_root: Path, agent_def: dict) -> tuple[dict, dict, dict]:
+    """Resolve index metadata from legacy and new refs.
+
+    Resolution order:
+    1) knowledgeIndexRef (legacy, still supported)
+    2) knowledgeRef -> indexRef
+    3) foundryIqRef -> indexRef / knowledgeRef
+    """
+    index_cfg = maybe_load_json(repo_root, agent_def.get("knowledgeIndexRef"))
+    knowledge_cfg = maybe_load_json(repo_root, agent_def.get("knowledgeRef"))
+    foundry_iq_cfg = maybe_load_json(repo_root, agent_def.get("foundryIqRef"))
+
+    if not knowledge_cfg and foundry_iq_cfg.get("knowledgeRef"):
+        knowledge_cfg = maybe_load_json(repo_root, foundry_iq_cfg.get("knowledgeRef"))
+
+    if not index_cfg:
+        if knowledge_cfg.get("indexRef"):
+            index_cfg = maybe_load_json(repo_root, knowledge_cfg.get("indexRef"))
+        elif foundry_iq_cfg.get("indexRef"):
+            index_cfg = maybe_load_json(repo_root, foundry_iq_cfg.get("indexRef"))
+
+    if not index_cfg and knowledge_cfg.get("indexName"):
+        index_cfg = {
+            "name": knowledge_cfg["indexName"],
+            "retrieval": knowledge_cfg.get("retrieval", {"mode": "hybrid"}),
+            "connectionId": knowledge_cfg.get("connectionId"),
+        }
+
+    return index_cfg, knowledge_cfg, foundry_iq_cfg
+
+
 def resolve_agent_file(repo_root: Path, agent_name: str) -> Path:
     """Find the agent JSON file whose 'name' field matches agent_name."""
     for candidate in sorted((repo_root / "foundry" / "agents").rglob("*.json")):
@@ -69,6 +100,23 @@ def find_search_connection(connections_client):
                 return conn
     except Exception as exc:
         print(f"[deploy] Warning: could not list connections: {exc}", file=sys.stderr)
+    return None
+
+
+def find_connection_by_name_or_prefix(connections_client, exact_name: str | None, prefix: str | None):
+    """Resolve a project connection by exact name first, then by prefix."""
+    try:
+        matches = []
+        for conn in connections_client.list():
+            conn_name = getattr(conn, "name", "") or ""
+            if exact_name and conn_name == exact_name:
+                return conn
+            if prefix and conn_name.startswith(prefix):
+                matches.append(conn)
+        if matches:
+            return matches[0]
+    except Exception as exc:
+        print(f"[deploy] Warning: could not resolve connection by name/prefix: {exc}", file=sys.stderr)
     return None
 
 
@@ -175,7 +223,7 @@ def deploy_agent(agent_name: str, environment: str, version: str | None) -> dict
     prompt_ref = agent_def.get("promptRef")
     system_prompt = (repo_root / prompt_ref).read_text().strip() if prompt_ref else ""
     guardrail_cfg = maybe_load_json(repo_root, agent_def.get("guardrailRef"))
-    index_cfg = maybe_load_json(repo_root, agent_def.get("knowledgeIndexRef"))
+    index_cfg, knowledge_cfg, foundry_iq_cfg = resolve_index_config(repo_root, agent_def)
     memory_cfg = maybe_load_json(repo_root, agent_def.get("memoryRef"))
 
     # Build the environment-specific RAI policy resource path from the guardrail basename.
@@ -192,7 +240,10 @@ def deploy_agent(agent_name: str, environment: str, version: str | None) -> dict
     print(
         f"[deploy] Assets loaded — model={model_cfg.get('name', model_deployment)}, "
         f"guardrail={rai_policy_basename or 'none'}, "
-        f"index={index_cfg.get('name', 'none')}, memory={memory_cfg.get('name', 'none')}",
+        f"index={index_cfg.get('name', 'none')}, "
+        f"knowledge={knowledge_cfg.get('name', 'none')}, "
+        f"foundryIq={foundry_iq_cfg.get('name', 'none')}, "
+        f"memory={memory_cfg.get('name', 'none')}",
         file=sys.stderr,
     )
 
@@ -226,33 +277,66 @@ def deploy_agent(agent_name: str, environment: str, version: str | None) -> dict
         )
         ensure_rai_policy_in_arm(credential, foundry_resource_id, guardrail_cfg)
 
-    # --- Build tool list: AI Search for knowledge grounding ---
+    # --- Build tool list: Foundry IQ MCP tool when configured, else AI Search fallback ---
     tools: list = []
     tool_resources = None
 
-    search_conn = find_search_connection(client.connections)
-    if search_conn and index_cfg.get("name"):
-        print(
-            f"[deploy] Found search connection: {getattr(search_conn, 'name', search_conn.id)}",
-            file=sys.stderr,
-        )
-        ai_search = AzureAISearchTool(
-            index_connection_id=search_conn.id,
-            index_name=index_cfg["name"],
-        )
-        tools = ai_search.definitions
-        tool_resources = ai_search.resources
-    elif search_conn and not index_cfg.get("name"):
-        print(
-            "[deploy] Warning: search connection exists, but agent has no attached knowledge index metadata.",
-            file=sys.stderr,
-        )
-    else:
-        print(
-            "[deploy] Warning: no Azure AI Search connection found — "
-            "agent will deploy without knowledge grounding.",
-            file=sys.stderr,
-        )
+    knowledge_base_name = (foundry_iq_cfg.get("knowledgeBaseName") or knowledge_cfg.get("knowledgeBaseName") or "").strip()
+    project_connection_id = (foundry_iq_cfg.get("projectConnectionId") or "").strip()
+
+    if knowledge_base_name:
+        prefix = f"kb-{knowledge_base_name}-"
+        kb_conn = find_connection_by_name_or_prefix(client.connections, project_connection_id or None, prefix)
+        search_endpoint = ((config.get("knowledge") or {}).get("searchEndpoint") or "").rstrip("/")
+        if kb_conn and search_endpoint:
+            kb_conn_name = getattr(kb_conn, "name", project_connection_id)
+            kb_server_url = (
+                f"{search_endpoint}/knowledgebases/{knowledge_base_name}/mcp"
+                "?api-version=2025-11-01-Preview"
+            )
+            tools = [
+                {
+                    "type": "mcp",
+                    "server_label": f"kb_{knowledge_base_name}".replace("-", "_"),
+                    "server_url": kb_server_url,
+                    "project_connection_id": kb_conn_name,
+                }
+            ]
+            print(
+                f"[deploy] Using Foundry IQ MCP knowledgebase tool '{knowledge_base_name}' via connection '{kb_conn_name}'",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                "[deploy] Warning: Foundry IQ metadata found but matching connection/search endpoint was not resolved. "
+                "Falling back to AzureAISearchTool wiring.",
+                file=sys.stderr,
+            )
+
+    if not tools:
+        search_conn = find_search_connection(client.connections)
+        if search_conn and index_cfg.get("name"):
+            print(
+                f"[deploy] Found search connection: {getattr(search_conn, 'name', search_conn.id)}",
+                file=sys.stderr,
+            )
+            ai_search = AzureAISearchTool(
+                index_connection_id=search_conn.id,
+                index_name=index_cfg["name"],
+            )
+            tools = ai_search.definitions
+            tool_resources = ai_search.resources
+        elif search_conn and not index_cfg.get("name"):
+            print(
+                "[deploy] Warning: search connection exists, but agent has no attached knowledge index metadata.",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                "[deploy] Warning: no Azure AI Search connection found — "
+                "agent will deploy without knowledge grounding.",
+                file=sys.stderr,
+            )
 
     # --- Create or update the agent ---
     agent_kwargs = dict(

@@ -27,6 +27,7 @@ Prerequisites:
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -150,6 +151,15 @@ def extract_search_attachment(tools: list[dict[str, Any]], tool_resources: dict[
             search_tool = payload
             break
 
+    # Foundry IQ knowledgebase tools are surfaced as MCP endpoints and may not
+    # include explicit index_name fields in the tool payload.
+    if search_tool is None:
+        for tool in tools:
+            payload = safe_as_dict(tool) or {}
+            if (payload.get("type") or "").lower() == "mcp" and payload.get("server_url"):
+                search_tool = payload
+                break
+
     if search_tool is None:
         return None
 
@@ -162,17 +172,37 @@ def extract_search_attachment(tools: list[dict[str, Any]], tool_resources: dict[
             "indexConnectionId",
             "connection_id",
             "connectionId",
+            "project_connection_id",
+            "projectConnectionId",
             "name",
         },
     )
 
-    index_name = first_string(values["index_name"]) or first_string(values["indexName"]) or "default"
+    mcp_server_url = search_tool.get("server_url") if isinstance(search_tool, dict) else None
+    mcp_kb_name = None
+    if isinstance(mcp_server_url, str):
+        match = re.search(r"/knowledgebases/([^/]+)/mcp", mcp_server_url)
+        if match:
+            mcp_kb_name = match.group(1)
+
+    index_name = first_string(values["index_name"]) or first_string(values["indexName"]) or mcp_kb_name or "default"
     connection_id = (
         first_string(values["index_connection_id"])
         or first_string(values["indexConnectionId"])
         or first_string(values["connection_id"])
         or first_string(values["connectionId"])
+        or first_string(values["project_connection_id"])
+        or first_string(values["projectConnectionId"])
     )
+
+    # Resolve short project connection names to full ARM IDs when possible.
+    if connection_id and not connection_id.startswith("/"):
+        for conn in connections:
+            conn_id = conn.get("id") or ""
+            conn_name = conn.get("name") or ""
+            if conn_name == connection_id or conn_id.endswith(f"/connections/{connection_id}"):
+                connection_id = conn_id
+                break
 
     if connection_id is None and len(connections) == 1:
         connection_id = connections[0].get("id") or None
@@ -186,6 +216,15 @@ def extract_search_attachment(tools: list[dict[str, Any]], tool_resources: dict[
     }
     if connection_id:
         payload["connectionId"] = connection_id
+    if mcp_kb_name:
+        payload["knowledgeBaseName"] = mcp_kb_name
+    if isinstance(mcp_server_url, str) and mcp_server_url:
+        payload["mcpServerUrl"] = mcp_server_url
+    if isinstance(search_tool, dict):
+        if search_tool.get("server_label"):
+            payload["mcpServerLabel"] = search_tool.get("server_label")
+        if search_tool.get("project_connection_id"):
+            payload["projectConnectionId"] = search_tool.get("project_connection_id")
     return payload
 
 
@@ -245,6 +284,8 @@ def derive_attached_resources(bundle: dict, arm_rai_policy: dict | None = None) 
         "guardrail": None,
         "toolset": None,
         "knowledgeIndex": None,
+        "knowledge": None,
+        "foundryIq": None,
         "memory": None,
     }
 
@@ -292,9 +333,15 @@ def derive_attached_resources(bundle: dict, arm_rai_policy: dict | None = None) 
             t = safe_as_dict(tool) or {}
             normalized.append(
                 {
-                    "name": t.get("name") or t.get("id") or t.get("function", {}).get("name") or "unnamed-tool",
+                    "name": (
+                        t.get("name")
+                        or t.get("id")
+                        or t.get("server_label")
+                        or t.get("function", {}).get("name")
+                        or "unnamed-tool"
+                    ),
                     "kind": t.get("type") or t.get("kind") or "unknown",
-                    "purpose": t.get("description") or t.get("purpose") or "",
+                    "purpose": t.get("description") or t.get("purpose") or t.get("server_url") or "",
                 }
             )
         attached["toolset"] = {
@@ -304,6 +351,28 @@ def derive_attached_resources(bundle: dict, arm_rai_policy: dict | None = None) 
     knowledge_payload = extract_search_attachment(tools, tool_resources, connections)
     if knowledge_payload:
         attached["knowledgeIndex"] = knowledge_payload
+        attached["knowledge"] = {
+            "name": f"{knowledge_payload['name']}-knowledge",
+            "description": "Knowledge asset exported from live Foundry attachment.",
+            "indexName": knowledge_payload["name"],
+            "retrieval": knowledge_payload.get("retrieval", {"mode": "hybrid"}),
+            "connectionId": knowledge_payload.get("connectionId"),
+            "knowledgeBaseName": knowledge_payload.get("knowledgeBaseName"),
+            "indexRef": "",
+        }
+        attached["foundryIq"] = {
+            "name": f"{knowledge_payload['name']}-foundry-iq",
+            "description": "Foundry IQ configuration exported from live Foundry attachment.",
+            "provider": "azure-ai-search",
+            "indexName": knowledge_payload["name"],
+            "connectionId": knowledge_payload.get("connectionId"),
+            "knowledgeBaseName": knowledge_payload.get("knowledgeBaseName"),
+            "projectConnectionId": knowledge_payload.get("projectConnectionId"),
+            "mcpServerLabel": knowledge_payload.get("mcpServerLabel"),
+            "mcpServerUrl": knowledge_payload.get("mcpServerUrl"),
+            "knowledgeRef": "",
+            "indexRef": "",
+        }
 
     if metadata.get("memoryMode"):
         attached["memory"] = {
@@ -384,10 +453,23 @@ def sync_agent_bundle_to_repo(bundle: dict, repo_root: Path) -> dict:
     if attached["toolset"]:
         toolset_ref = choose_ref(existing_agent, "toolsetRef", f"foundry/tools/{default_slug}-toolset.json")
         toolset_file = repo_root / toolset_ref
-        toolset_payload = {
-            "name": basename_from_resource_id(toolset_ref)[:-5] if toolset_ref.endswith('.json') else f"{agent_name}-toolset",
-            **attached["toolset"],
-        }
+        existing_toolset = load_json(toolset_file) if toolset_file.exists() else {}
+        exported_tools = attached["toolset"].get("tools", [])
+        if exported_tools and all(
+            t.get("name") == "unnamed-tool" and not (t.get("purpose") or "").strip()
+            for t in exported_tools
+        ):
+            # Keep existing tool contracts if the exporter could not infer tool details.
+            exported_tools = existing_toolset.get("tools", exported_tools)
+
+        toolset_payload = dict(existing_toolset)
+        toolset_payload["name"] = (
+            toolset_payload.get("name")
+            or basename_from_resource_id(toolset_ref)[:-5]
+            if toolset_ref.endswith('.json')
+            else f"{agent_name}-toolset"
+        )
+        toolset_payload["tools"] = exported_tools
         write_json(toolset_file, toolset_payload)
         synced_agent["toolsetRef"] = toolset_ref
         synced_files["toolset"] = str(toolset_file.relative_to(repo_root))
@@ -397,11 +479,41 @@ def sync_agent_bundle_to_repo(bundle: dict, repo_root: Path) -> dict:
     if attached["knowledgeIndex"]:
         knowledge_ref = choose_ref(existing_agent, "knowledgeIndexRef", f"foundry/indexes/{default_slug}-knowledge-index.json")
         knowledge_file = repo_root / knowledge_ref
-        write_json(knowledge_file, attached["knowledgeIndex"])
+        existing_knowledge_index = load_json(knowledge_file) if knowledge_file.exists() else {}
+        merged_knowledge_index = dict(existing_knowledge_index)
+        merged_knowledge_index.update({k: v for k, v in attached["knowledgeIndex"].items() if v is not None})
+        if isinstance(existing_knowledge_index.get("retrieval"), dict) or isinstance(attached["knowledgeIndex"].get("retrieval"), dict):
+            merged_retrieval = dict(existing_knowledge_index.get("retrieval", {}))
+            merged_retrieval.update(attached["knowledgeIndex"].get("retrieval", {}))
+            merged_knowledge_index["retrieval"] = merged_retrieval
+        write_json(knowledge_file, merged_knowledge_index)
         synced_agent["knowledgeIndexRef"] = knowledge_ref
         synced_files["knowledgeIndex"] = str(knowledge_file.relative_to(repo_root))
     else:
         synced_agent.pop("knowledgeIndexRef", None)
+
+    if attached["knowledge"]:
+        knowledge_ref = choose_ref(existing_agent, "knowledgeRef", f"foundry/knowledge/{default_slug}-knowledge.json")
+        knowledge_file = repo_root / knowledge_ref
+        knowledge_payload = dict(attached["knowledge"])
+        knowledge_payload["indexRef"] = synced_agent.get("knowledgeIndexRef", "")
+        write_json(knowledge_file, knowledge_payload)
+        synced_agent["knowledgeRef"] = knowledge_ref
+        synced_files["knowledge"] = str(knowledge_file.relative_to(repo_root))
+    else:
+        synced_agent.pop("knowledgeRef", None)
+
+    if attached["foundryIq"]:
+        foundry_iq_ref = choose_ref(existing_agent, "foundryIqRef", f"foundry/foundry-iq/{default_slug}-foundry-iq.json")
+        foundry_iq_file = repo_root / foundry_iq_ref
+        foundry_iq_payload = dict(attached["foundryIq"])
+        foundry_iq_payload["indexRef"] = synced_agent.get("knowledgeIndexRef", "")
+        foundry_iq_payload["knowledgeRef"] = synced_agent.get("knowledgeRef", "")
+        write_json(foundry_iq_file, foundry_iq_payload)
+        synced_agent["foundryIqRef"] = foundry_iq_ref
+        synced_files["foundryIq"] = str(foundry_iq_file.relative_to(repo_root))
+    else:
+        synced_agent.pop("foundryIqRef", None)
 
     if attached["memory"]:
         memory_ref = choose_ref(existing_agent, "memoryRef", f"foundry/memory/{default_slug}-memory.json")

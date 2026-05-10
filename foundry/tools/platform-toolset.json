@@ -2,19 +2,9 @@
   "name": "platform-toolset",
   "tools": [
     {
-      "name": "search-knowledge",
+      "name": "kb_kb_iq_v1_119cl",
       "kind": "mcp",
-      "purpose": "Ground incident answers against indexed operating content."
-    },
-    {
-      "name": "create-change-ticket",
-      "kind": "function",
-      "purpose": "Open a change record for deployment or policy updates."
-    },
-    {
-      "name": "request-approval",
-      "kind": "function",
-      "purpose": "Initiate human approval for QA or Prod promotion."
+      "purpose": "https://srch-dev-foundry-oplab-eus2.search.windows.net/knowledgebases/kb-iq-v1/mcp?api-version=2025-11-01-Preview"
     }
   ]
 }

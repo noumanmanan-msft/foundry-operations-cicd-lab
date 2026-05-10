@@ -141,7 +141,8 @@ az deployment sub create \
 
 ### 4.1 Azure AI Search index bootstrap behavior
 
-The Bicep module includes code to create an Azure AI Search index named `default` in each environment as part of deployment.
+The Bicep module includes an optional deployment script resource to create an Azure AI Search index named `default`.
+By default this bootstrap is disabled in `infra/bicep/main.bicep` (`enableSearchIndexBootstrap: false`) to avoid policy failures in environments that block shared-key auth for deployment script storage.
 
 - Implementation location: `infra/bicep/modules/resources.bicep` resource `aiSearchDefaultIndex` (`Microsoft.Resources/deploymentScripts`)
 - Output surface: `aiSearchIndexName` from `infra/bicep/main.bicep`
@@ -158,15 +159,14 @@ az rest --method get \
   --output json
 ```
 
-If your organization blocks shared-key auth on the storage account used by deployment scripts, deployments can fail with `KeyBasedAuthenticationNotPermitted` during index bootstrap.
-In that case, create the same index directly with CLI and continue:
+Create or update the index directly with CLI after deployment:
 
 ```bash
 SEARCH_SERVICE=srch-qa-foundry-oplab-eus2
 RG=rg-qa-foundry-operation-lab-eastus2
 ADMIN_KEY=$(az search admin-key show --service-name "$SEARCH_SERVICE" --resource-group "$RG" --query primaryKey -o tsv)
 
-BODY='{"name":"default","fields":[{"name":"id","type":"Edm.String","key":true,"searchable":false,"filterable":true,"sortable":false,"facetable":false}]}'
+BODY='{"name":"default","fields":[{"name":"id","type":"Edm.String","key":true,"searchable":false,"filterable":true,"sortable":false,"facetable":false},{"name":"title","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":false},{"name":"category","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true},{"name":"content","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false},{"name":"source","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":false}],"semantic":{"configurations":[{"name":"default","prioritizedFields":{"titleField":{"fieldName":"title"},"prioritizedContentFields":[{"fieldName":"content"}],"prioritizedKeywordsFields":[{"fieldName":"category"}]}}]}}'
 
 az rest --method put \
   --url "https://${SEARCH_SERVICE}.search.windows.net/indexes/default?api-version=2024-07-01" \

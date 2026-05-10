@@ -1,12 +1,11 @@
 {
-  "name": "kb-iq-v1",
-  "description": "Knowledge index exported from live agent attachment.",
+  "name": "kb-iq-v1-knowledge",
+  "description": "Knowledge asset exported from live Foundry attachment.",
+  "indexName": "kb-iq-v1",
   "retrieval": {
     "mode": "hybrid"
   },
   "connectionId": "/subscriptions/561c41c9-f3ec-4ad6-977a-ab33f0b43a6a/resourceGroups/rg-dev-foundry-operation-lab-eastus2/providers/Microsoft.CognitiveServices/accounts/aif-dev-foundry-operation-eastus2/projects/default-dev-project/connections/kb-kb-iq-v1-119cl",
   "knowledgeBaseName": "kb-iq-v1",
-  "mcpServerUrl": "https://srch-dev-foundry-oplab-eus2.search.windows.net/knowledgebases/kb-iq-v1/mcp?api-version=2025-11-01-Preview",
-  "mcpServerLabel": "kb_kb_iq_v1_119cl",
-  "projectConnectionId": "kb-kb-iq-v1-119cl"
+  "indexRef": "foundry/indexes/operations-knowledge-index.json"
 }

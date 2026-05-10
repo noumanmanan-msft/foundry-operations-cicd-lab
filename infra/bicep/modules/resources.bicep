@@ -19,6 +19,9 @@ param environmentName string
 @description('Optional Entra ID object ID for Foundry admin role assignment. Leave empty to skip.')
 param foundryAdminObjectId string = ''
 
+@description('Enable Azure deployment script to create/update the default Azure AI Search index. Keep false when shared-key auth is blocked by policy.')
+param enableSearchIndexBootstrap bool = false
+
 @description('Tags applied to all resources.')
 param tags object
 
@@ -37,6 +40,9 @@ var appInsightsName = 'appi-${environmentName}-foundry-oplab-${locationAbbr}'
 var containerAppsEnvironmentName = 'cae-${environmentName}-foundry-oplab-${locationAbbr}'
 var aiSearchName = 'srch-${environmentName}-foundry-oplab-${locationAbbr}'
 var aiSearchIndexName = 'default'
+var knowledgeBaseName = 'kb-iq-v1'
+var foundryIqConnectionName = 'kb-${knowledgeBaseName}-${environmentName}'
+var foundryIqTarget = 'https://${aiSearch.name}.search.windows.net/knowledgebases/${knowledgeBaseName}/mcp?api-version=2025-11-01-Preview'
 var managedIdentityName = 'id-${environmentName}-foundry-oplab-${locationAbbr}'
 
 // ---------------------------------------------------------------------------
@@ -45,7 +51,8 @@ var managedIdentityName = 'id-${environmentName}-foundry-oplab-${locationAbbr}'
 
 var logRetentionDays = environmentName == 'prod' ? 90 : environmentName == 'qa' ? 60 : 30
 var acrSkuName = environmentName == 'prod' ? 'Standard' : 'Basic'
-var aiSearchSkuName = environmentName == 'prod' ? 'standard' : environmentName == 'qa' ? 'basic' : 'free'
+// Semantic ranking is required for Foundry knowledge sources; keep all envs on non-free SKU.
+var aiSearchSkuName = environmentName == 'prod' ? 'standard' : 'basic'
 var aiSearchLocation = location == 'eastus2' ? 'eastus' : location
 var enableKvPurgeProtection = environmentName == 'prod'
 
@@ -191,7 +198,7 @@ resource aiSearch 'Microsoft.Search/searchServices@2024-03-01-preview' = {
 }
 
 // Creates or updates the Azure AI Search index required by Foundry grounding.
-resource aiSearchDefaultIndex 'Microsoft.Resources/deploymentScripts@2023-08-01' = {
+resource aiSearchDefaultIndex 'Microsoft.Resources/deploymentScripts@2023-08-01' = if (enableSearchIndexBootstrap) {
   name: 'create-default-search-index-${environmentName}'
   location: location
   kind: 'AzureCLI'
@@ -235,8 +242,62 @@ payload=$(cat <<JSON
       "filterable": true,
       "sortable": false,
       "facetable": false
+    },
+    {
+      "name": "title",
+      "type": "Edm.String",
+      "searchable": true,
+      "filterable": true,
+      "sortable": true,
+      "facetable": false
+    },
+    {
+      "name": "category",
+      "type": "Edm.String",
+      "searchable": true,
+      "filterable": true,
+      "sortable": true,
+      "facetable": true
+    },
+    {
+      "name": "content",
+      "type": "Edm.String",
+      "searchable": true,
+      "filterable": false,
+      "sortable": false,
+      "facetable": false
+    },
+    {
+      "name": "source",
+      "type": "Edm.String",
+      "searchable": true,
+      "filterable": true,
+      "sortable": true,
+      "facetable": false
     }
-  ]
+  ],
+  "semantic": {
+    "configurations": [
+      {
+        "name": "default",
+        "prioritizedFields": {
+          "titleField": {
+            "fieldName": "title"
+          },
+          "prioritizedContentFields": [
+            {
+              "fieldName": "content"
+            }
+          ],
+          "prioritizedKeywordsFields": [
+            {
+              "fieldName": "category"
+            }
+          ]
+        }
+      }
+    ]
+  }
 }
 JSON
 )
@@ -286,6 +347,28 @@ resource foundryProject 'Microsoft.CognitiveServices/accounts/projects@2025-06-0
     description: 'Foundry project for ${environmentName}'
   }
   tags: tags
+}
+
+resource foundryIqConnection 'Microsoft.CognitiveServices/accounts/projects/connections@2026-03-01' = {
+  parent: foundryProject
+  name: foundryIqConnectionName
+  properties: {
+    category: 'RemoteTool'
+    authType: any('ProjectManagedIdentity')
+    audience: 'https://search.azure.com'
+    group: 'GenericProtocol'
+    isDefault: true
+    isSharedToAll: false
+    metadata: {
+      knowledgeBaseName: knowledgeBaseName
+      type: 'knowledgeBase_MCP'
+    }
+    peRequirement: 'NotRequired'
+    peStatus: 'NotApplicable'
+    sharedUserList: []
+    target: foundryIqTarget
+    useWorkspaceManagedIdentity: false
+  }
 }
 
 // =============================================================================
@@ -383,3 +466,5 @@ output containerAppsEnvironmentId string = containerAppsEnvironment.id
 output keyVaultUri string = keyVault.properties.vaultUri
 output aiSearchEndpoint string = 'https://${aiSearch.name}.search.windows.net'
 output aiSearchIndexName string = aiSearchIndexName
+output foundryIqConnectionName string = foundryIqConnectionName
+output foundryIqConnectionTarget string = foundryIqTarget
