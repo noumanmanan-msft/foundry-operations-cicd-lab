@@ -63,6 +63,7 @@ module resources './modules/resources.bicep' = {
     locationAbbr: locationAbbr
     environmentName: environmentName
     foundryAdminObjectId: foundryAdminObjectId
+    enableSearchIndexBootstrap: false
     tags: tags
   }
 }
@@ -81,3 +82,5 @@ output containerAppsEnvironmentId string = resources.outputs.containerAppsEnviro
 output keyVaultUri string = resources.outputs.keyVaultUri
 output aiSearchEndpoint string = resources.outputs.aiSearchEndpoint
 output aiSearchIndexName string = resources.outputs.aiSearchIndexName
+output foundryIqConnectionName string = resources.outputs.foundryIqConnectionName
+output foundryIqConnectionTarget string = resources.outputs.foundryIqConnectionTarget

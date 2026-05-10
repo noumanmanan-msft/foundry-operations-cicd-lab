@@ -5,6 +5,10 @@
   "modelRef": "foundry/models/incident-triage-model.json",
   "promptRef": "foundry/prompts/incident-triage.system.txt",
   "guardrailRef": "foundry/guardrails/standard-guardrails.json",
+  "toolsetRef": "foundry/tools/platform-toolset.json",
+  "knowledgeIndexRef": "foundry/indexes/operations-knowledge-index.json",
+  "knowledgeRef": "foundry/knowledge/operations-knowledge.json",
+  "foundryIqRef": "foundry/foundry-iq/operations-foundry-iq.json",
   "memoryRef": "foundry/memory/session-memory.json",
   "evaluationProfile": "incident-resolution"
 }

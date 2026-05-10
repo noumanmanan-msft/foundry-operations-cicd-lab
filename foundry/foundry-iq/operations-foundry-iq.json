@@ -1,0 +1,13 @@
+{
+  "name": "kb-iq-v1-foundry-iq",
+  "description": "Foundry IQ configuration exported from live Foundry attachment.",
+  "provider": "azure-ai-search",
+  "indexName": "kb-iq-v1",
+  "connectionId": "/subscriptions/561c41c9-f3ec-4ad6-977a-ab33f0b43a6a/resourceGroups/rg-dev-foundry-operation-lab-eastus2/providers/Microsoft.CognitiveServices/accounts/aif-dev-foundry-operation-eastus2/projects/default-dev-project/connections/kb-kb-iq-v1-119cl",
+  "knowledgeBaseName": "kb-iq-v1",
+  "projectConnectionId": "kb-kb-iq-v1-119cl",
+  "mcpServerLabel": "kb_kb_iq_v1_119cl",
+  "mcpServerUrl": "https://srch-dev-foundry-oplab-eus2.search.windows.net/knowledgebases/kb-iq-v1/mcp?api-version=2025-11-01-Preview",
+  "knowledgeRef": "foundry/knowledge/operations-knowledge.json",
+  "indexRef": "foundry/indexes/operations-knowledge-index.json"
+}
