@@ -220,6 +220,35 @@ az rest --method put \
 4. QA verification and approval checkpoint
 5. Promote to Prod with manual approval and post-deploy validation
 
+### 5.6 Foundry asset reconciliation (Dev -> QA -> Prod)
+
+Use this as the source-of-truth workflow for portal-originated changes (for example, a new knowledge base attached to an agent in Dev).
+
+1. Make the change in Dev Foundry only.
+2. Export and sync repo metadata from Dev:
+
+```bash
+python scripts/export_agent_from_foundry.py \
+  --agent-name incident-triage-hosted \
+  --environment dev \
+  --output .dist/incident-triage-export-dev.json \
+  --sync-repo
+```
+
+3. Open PR with the changed `foundry/` JSON files.
+4. Validation pipeline enforces portable metadata (no Dev ARM IDs or hardcoded Dev search URLs).
+5. Merge to `main`.
+6. Promotion workflows deploy the same metadata to QA and Prod; deployer resolves environment-specific connection names/endpoints at runtime.
+
+Portability rules (enforced by `scripts/validate_foundry_assets.py`):
+
+1. Do not commit absolute `connectionId` ARM paths in `foundry/indexes`, `foundry/knowledge`, or `foundry/foundry-iq`.
+2. Do not commit hardcoded `mcpServerUrl` values with environment hostnames.
+3. Use template fields instead:
+   1. `projectConnectionNameTemplate` (must include `{environment}`)
+   2. `projectConnectionPrefix`
+   3. `mcpServerUrlTemplate` (uses `{searchEndpointHost}` and `{knowledgeBaseName}`)
+
 ## 6. Recommended Pipeline Gates
 
 Use these quality gates before each promotion.
