@@ -19,6 +19,8 @@ def collect_assets(foundry_root: Path):
         "evaluations",
         "foundry-iq",
         "knowledge",
+        "knowledgebases",
+        "knowledge-sources",
     ]:
         category_root = foundry_root / category
         items = []

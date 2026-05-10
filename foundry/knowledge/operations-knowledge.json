@@ -6,9 +6,10 @@
     "mode": "hybrid"
   },
   "knowledgeBaseName": "kb-iq-v1",
-  "projectConnectionId": "kb-kb-iq-v1-dev",
+  "indexRef": "foundry/indexes/operations-knowledge-index.json",
+  "projectConnectionId": "kb-kb-iq-v1-119cl",
   "projectConnectionPrefix": "kb-kb-iq-v1-",
   "projectConnectionNameTemplate": "kb-kb-iq-v1-{environment}",
   "mcpServerUrlTemplate": "https://{searchEndpointHost}/knowledgebases/kb-iq-v1/mcp?api-version=2025-11-01-Preview",
-  "indexRef": "foundry/indexes/operations-knowledge-index.json"
+  "mcpServerLabel": "kb_kb_iq_v1"
 }

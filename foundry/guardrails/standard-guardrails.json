@@ -19,14 +19,14 @@
       "action": "NONE"
     },
     {
-      "name": "purview",
+      "name": "Purview",
       "blocking": true,
       "enabled": true,
       "source": "Prompt",
       "action": "NONE"
     },
     {
-      "name": "purview",
+      "name": "Purview",
       "blocking": true,
       "enabled": true,
       "source": "Completion",

@@ -101,5 +101,12 @@ jobs:
           if 'srch-prod-' not in server_url:
               raise SystemExit(f"Prod MCP server_url does not target Prod search endpoint: '{server_url}'")
 
-          print(f"Prod promotion wiring verified: connection={conn_name}")
+            kb_names = [
+              (item or {}).get('name', '').strip()
+              for item in (payload.get('knowledgeBases') or [])
+            ]
+            if 'kb-iq-v1' not in kb_names:
+              raise SystemExit(f"Prod knowledgebase 'kb-iq-v1' not found in live export. Found: {kb_names}")
+
+            print(f"Prod promotion wiring verified: connection={conn_name}; knowledgebases={kb_names}")
           PY
