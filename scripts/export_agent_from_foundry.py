@@ -884,6 +884,19 @@ def sync_agent_bundle_to_repo(bundle: dict, repo_root: Path) -> dict:
             # Write the KB definition file
             kb_ref = f"foundry/knowledgebases/{kb_name}.json"
             kb_file = repo_root / kb_ref
+            existing_kb_payload = load_json(kb_file) if kb_file.exists() else {}
+            existing_definition = existing_kb_payload.get("definition") if isinstance(existing_kb_payload, dict) else {}
+            if not isinstance(existing_definition, dict):
+                existing_definition = {}
+
+            definition = kb_snap.get("definition") if isinstance(kb_snap.get("definition"), dict) else {}
+            merged_definition = dict(existing_definition)
+            merged_definition.update(definition)
+            if not merged_definition:
+                merged_definition = {"name": kb_name}
+            elif not merged_definition.get("name"):
+                merged_definition["name"] = kb_name
+
             kb_repo_payload = {
                 "name": kb_name,
                 "description": "Knowledgebase definition exported from Dev Azure AI Search.",
@@ -891,15 +904,14 @@ def sync_agent_bundle_to_repo(bundle: dict, repo_root: Path) -> dict:
                 "projectConnectionPrefix": f"kb-{kb_name}-",
                 "projectConnectionNameTemplate": f"kb-{kb_name}-{{environment}}",
                 "mcpServerUrlTemplate": (
-                    "https://{searchEndpointHost}/knowledgebases/{knowledgeBaseName}/mcp"
-                    "?api-version=2025-11-01-Preview"
+                    f"https://{{searchEndpointHost}}/knowledgebases/{kb_name}/mcp?api-version=2025-11-01-Preview"
                 ),
                 "knowledgeSourceRefs": [
                     knowledge_source_refs[name]
                     for name in kb_snap.get("knowledgeSourceNames") or []
                     if name in knowledge_source_refs
                 ],
-                "definition": kb_snap.get("definition") or {},
+                "definition": merged_definition,
             }
             write_json(kb_file, kb_repo_payload)
             foundry_iq_payload["knowledgeBaseRef"] = kb_ref
