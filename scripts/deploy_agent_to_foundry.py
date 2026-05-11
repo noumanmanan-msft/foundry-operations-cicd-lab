@@ -780,6 +780,32 @@ def find_search_connection(connections_client):
     return None
 
 
+def find_connection_by_name_or_prefix(connections_client, expected_name: str | None, prefix: str | None):
+    """Find a project connection by exact name/id first, then by name prefix."""
+    try:
+        connections = list(connections_client.list())
+    except Exception as exc:
+        print(f"[deploy] Warning: could not list connections: {exc}", file=sys.stderr)
+        return None
+
+    if expected_name:
+        expected = expected_name.strip().lower()
+        for conn in connections:
+            conn_name = str(getattr(conn, "name", "") or "").strip().lower()
+            conn_id = str(getattr(conn, "id", "") or "").strip().lower()
+            if conn_name == expected or conn_id == expected:
+                return conn
+
+    if prefix:
+        starts_with = prefix.strip().lower()
+        for conn in connections:
+            conn_name = str(getattr(conn, "name", "") or "").strip().lower()
+            if conn_name.startswith(starts_with):
+                return conn
+
+    return None
+
+
 def find_existing_agent(agents_client, agent_name: str):
     """Return the agent object if it already exists in the project, else None."""
     list_fn = getattr(agents_client, "list", None) or getattr(agents_client, "list_agents", None)
