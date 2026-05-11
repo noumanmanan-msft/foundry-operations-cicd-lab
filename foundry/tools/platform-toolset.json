@@ -2,9 +2,14 @@
   "name": "platform-toolset",
   "tools": [
     {
-      "name": "kb_kb_iq_v1",
+      "name": "search-knowledge",
       "kind": "mcp",
-      "purpose": "https://srch-dev-foundry-oplab-eus2.search.windows.net/knowledgebases/kb-iq-v1/mcp?api-version=2025-11-01-Preview"
+      "purpose": "https://{searchEndpointHost}/knowledgebases/kb-iq-v1/mcp?api-version=2025-11-01-Preview"
+    },
+    {
+      "name": "kb_kb_iq_v2",
+      "kind": "mcp",
+      "purpose": "https://{searchEndpointHost}/knowledgebases/kb-iq-v2/mcp?api-version=2025-11-01-Preview"
     }
   ]
 }
