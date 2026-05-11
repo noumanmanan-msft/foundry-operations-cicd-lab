@@ -1,16 +1,13 @@
 {
   "name": "kb-iq-v1",
   "description": "Knowledgebase definition exported from Dev Azure AI Search.",
-  "projectConnectionId": "kb-kb-iq-v1-119cl",
+  "projectConnectionId": "kb-kb-iq-v1-{connectionNameSuffix}",
   "projectConnectionPrefix": "kb-kb-iq-v1-",
-  "projectConnectionNameTemplate": "kb-kb-iq-v1-{environment}",
+  "projectConnectionNameTemplate": "kb-kb-iq-v1-{connectionNameSuffix}",
   "mcpServerUrlTemplate": "https://{searchEndpointHost}/knowledgebases/kb-iq-v1/mcp?api-version=2025-11-01-Preview",
-  "knowledgeSourceRefs": [
-    "foundry/knowledge-sources/ks-azure-ai-searchindex.json"
-  ],
+  "knowledgeSourceRefs": [],
   "definition": {
-    "@odata.context": "https://srch-dev-foundry-oplab-eus2.search.windows.net/$metadata#knowledgebases/$entity",
-    "@odata.etag": "\"0x8DEAEBBDE71BBF7\"",
+    "@odata.context": "https://{searchEndpointHost}/$metadata#knowledgebases/$entity",
     "name": "kb-iq-v1",
     "description": "",
     "retrievalInstructions": "",

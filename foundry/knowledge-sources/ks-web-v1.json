@@ -1,0 +1,18 @@
+{
+  "name": "ks-web-v1",
+  "description": "Knowledge source definition exported from Dev Azure AI Search.",
+  "definition": {
+    "name": "ks-web-v1",
+    "kind": "web",
+    "description": "\r\nWeb (public) - Call only if internal / private indexes cannot confidently satisfy the query AND one or more of:\r\n - Fresh / time-varying info (news, versions, active research, sports, market/policy updates)\r\n - Local / geo-specific details (regulations, services, events, logistics)\r\n - Public entity facts (people, orgs, teams, stats, rosters)\r\n - High-risk or precision domains (medical, legal, financial, safety, scientific metrics)\r\n - Explicit sourcing / verification / citation requested\r\n - Recent public quantitative metrics / rankings / tables\r\n\r\nCost note: Expensive (latency, tokens, rate limits). Always attempt internal grounding first; escalate only when freshness, coverage, or citation needs justify the external call.",
+    "encryptionKey": null,
+    "searchIndexParameters": null,
+    "azureBlobParameters": null,
+    "mcpToolParameters": null,
+    "fabricIQParameters": null,
+    "webParameters": null,
+    "remoteSharePointParameters": null,
+    "indexedSharePointParameters": null,
+    "indexedOneLakeParameters": null
+  }
+}

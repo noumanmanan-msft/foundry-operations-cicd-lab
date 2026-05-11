@@ -55,6 +55,11 @@ Run prompts in this exact order.
 4. Permission to create role assignments
 5. Required provider namespaces registered
 
+Promotion prerequisites (operational):
+
+1. QA v2 stack is provisioned before first real QA promotion (`kb-iq-v2` knowledge base, `ks-web-v1` knowledge source, `kb-kb-iq-v2-qa` connection, `gpt-4o` deployment).
+2. Prod GitHub Environment has required reviewers configured in repository settings.
+
 Commands:
 
 ```bash
@@ -141,8 +146,7 @@ az deployment sub create \
 
 ### 4.1 Azure AI Search index bootstrap behavior
 
-The Bicep module includes an optional deployment script resource to create an Azure AI Search index named `default`.
-By default this bootstrap is disabled in `infra/bicep/main.bicep` (`enableSearchIndexBootstrap: false`) to avoid policy failures in environments that block shared-key auth for deployment script storage.
+The Bicep module includes code to create an Azure AI Search index named `default` in each environment as part of deployment.
 
 - Implementation location: `infra/bicep/modules/resources.bicep` resource `aiSearchDefaultIndex` (`Microsoft.Resources/deploymentScripts`)
 - Output surface: `aiSearchIndexName` from `infra/bicep/main.bicep`
@@ -159,14 +163,15 @@ az rest --method get \
   --output json
 ```
 
-Create or update the index directly with CLI after deployment:
+If your organization blocks shared-key auth on the storage account used by deployment scripts, deployments can fail with `KeyBasedAuthenticationNotPermitted` during index bootstrap.
+In that case, create the same index directly with CLI and continue:
 
 ```bash
 SEARCH_SERVICE=srch-qa-foundry-oplab-eus2
 RG=rg-qa-foundry-operation-lab-eastus2
 ADMIN_KEY=$(az search admin-key show --service-name "$SEARCH_SERVICE" --resource-group "$RG" --query primaryKey -o tsv)
 
-BODY='{"name":"default","fields":[{"name":"id","type":"Edm.String","key":true,"searchable":false,"filterable":true,"sortable":false,"facetable":false},{"name":"title","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":false},{"name":"category","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true},{"name":"content","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false},{"name":"source","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":false}],"semantic":{"configurations":[{"name":"default","prioritizedFields":{"titleField":{"fieldName":"title"},"prioritizedContentFields":[{"fieldName":"content"}],"prioritizedKeywordsFields":[{"fieldName":"category"}]}}]}}'
+BODY='{"name":"default","fields":[{"name":"id","type":"Edm.String","key":true,"searchable":false,"filterable":true,"sortable":false,"facetable":false}]}'
 
 az rest --method put \
   --url "https://${SEARCH_SERVICE}.search.windows.net/indexes/default?api-version=2024-07-01" \
@@ -214,26 +219,24 @@ az rest --method put \
 
 ### 5.5 CI/CD promotion workflow
 
-1. Dev changes: model, prompt, tool, guardrail, or agent update
-2. Automatic validation: lint, compile, tests, eval datasets
-3. Promote to QA on passing gates
-4. QA verification and approval checkpoint
-5. Promote to Prod with manual approval and post-deploy validation
+1. `validate-foundry-assets.yml` triggers on PR and on push to `main` (scoped paths) and enforces strict validation plus bundle rendering checks.
+2. `deploy-dev-foundry.yml` triggers on push to `main` (scoped paths) and manual dispatch; it validates strictly, renders artifacts, runs dry-run pre-flight, then deploys to Dev.
+3. `promote-foundry-qa.yml` triggers on successful `deploy-dev-foundry` workflow completion and manual dispatch; it runs strict validation, dry-run pre-flight, live deploy, then post-deploy multi-KB verification.
+4. `promote-foundry-prod.yml` triggers on successful `promote-foundry-qa` workflow completion and manual dispatch; it runs preflight in one job and live deploy plus verification in a separate prod-gated job.
+5. `export-sync.yml` triggers on manual dispatch; it exports from a selected source environment, validates strictly, and opens a PR against `develop` when deltas exist.
+
+QA and Prod promotions require a pre-flight dry-run to pass before live deploy runs. Reviewers can inspect the dry-run output in workflow logs before approving any downstream promotion step.
+
+Prod promotion requires GitHub Environment approval. Required reviewers are configured in GitHub repository/environment settings, not in workflow YAML.
+
+Future work note: `.github/workflows/release-foundry-bundle.yml` exists as a reusable `workflow_call` template but is not currently invoked by active deploy workflows. Consider consolidating env-specific workflows to call it in a later refactor.
 
 ### 5.6 Foundry asset reconciliation (Dev -> QA -> Prod)
 
 Use this as the source-of-truth workflow for portal-originated changes (for example, a new knowledge base attached to an agent in Dev).
 
 1. Make the change in Dev Foundry only.
-2. Export and sync repo metadata from Dev:
-
-```bash
-python scripts/export_agent_from_foundry.py \
-  --agent-name incident-triage-hosted \
-  --environment dev \
-  --output .dist/incident-triage-export-dev.json \
-  --sync-repo
-```
+2. Run the `export-sync` workflow from GitHub Actions UI with agent name and source environment. The workflow exports, validates, and opens a PR against `develop`.
 
 3. Open PR with the changed `foundry/` JSON files.
 4. Validation pipeline enforces portable metadata (no Dev ARM IDs or hardcoded Dev search URLs).
@@ -242,12 +245,44 @@ python scripts/export_agent_from_foundry.py \
 
 Portability rules (enforced by `scripts/validate_foundry_assets.py`):
 
-1. Do not commit absolute `connectionId` ARM paths in `foundry/indexes`, `foundry/knowledge`, or `foundry/foundry-iq`.
-2. Do not commit hardcoded `mcpServerUrl` values with environment hostnames.
-3. Use template fields instead:
-   1. `projectConnectionNameTemplate` (must include `{environment}`)
-   2. `projectConnectionPrefix`
-   3. `mcpServerUrlTemplate` (uses `{searchEndpointHost}` and `{knowledgeBaseName}`)
+1. Do not commit environment-pinned hostnames in metadata values.
+2. Do not commit absolute ARM resource paths (for example `connectionId`) in portable Foundry assets.
+3. Do not commit platform-managed metadata such as `etag`, `@odata.etag`, `@odata.context`, `createdDateTime`, or `lastModifiedDateTime`.
+4. `mcpServerLabel` must be environment-agnostic (no env suffixes like `-dev`, `-qa`, `-prod`).
+5. `mcpServerUrlTemplate` must contain both `{searchEndpointHost}` and `{knowledgeBaseName}`.
+6. `resourceUri` under `azureOpenAIParameters` must use `{azureOpenAIAccountHost}`.
+7. `projectConnectionNameTemplate` must include `{connectionNameSuffix}`.
+
+Schema conventions:
+
+1. Agents use `foundryIqRefs` (array) with one entry per attached knowledge base.
+2. Legacy singular fields `foundryIqRef`, `knowledgeRef`, and `knowledgeIndexRef` are removed from active assets.
+
+Archive conventions:
+
+1. Files removed during migration are retained under `foundry/_archive/` for historical reference and are excluded from active validation/deploy flows.
+
+### 5.7 Local development workflow
+
+1. Run strict validator locally:
+
+```bash
+python scripts/validate_foundry_assets.py --strict
+```
+
+2. Run deploy dry-run locally:
+
+```bash
+python scripts/deploy_agent_to_foundry.py --agent-name <name> --environment <env> --dry-run
+```
+
+3. Run deployed-state verification locally:
+
+```bash
+python scripts/verify_deployed_agent.py --agent-name <name> --environment <env>
+```
+
+4. Use `--dry-run` as the safe inspection mode: it renders assets, executes pre-flight checks, and prints planned actions without mutating live environments.
 
 ## 6. Recommended Pipeline Gates
 

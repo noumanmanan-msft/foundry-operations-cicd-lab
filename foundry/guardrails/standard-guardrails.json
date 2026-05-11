@@ -1,5 +1,5 @@
 {
-  "name": "Base-Guardrail-v2",
+  "name": "Base-Guardrails-v3",
   "inputPolicies": [
     "block-secrets-in-chat",
     "block-credential-exfiltration",
@@ -9,24 +9,123 @@
     "require-grounding-for-environment-claims",
     "require-escalation-when-confidence-low"
   ],
-  "raiPolicyName": "Base-Guardrail-v2",
+  "raiPolicyName": "Base-Guardrails-v3",
   "contentFilters": [
     {
+      "name": "Hate",
+      "severityThreshold": "Medium",
+      "blocking": true,
+      "enabled": true,
+      "source": "Prompt",
+      "action": "NONE"
+    },
+    {
+      "name": "Hate",
+      "severityThreshold": "Medium",
+      "blocking": true,
+      "enabled": true,
+      "source": "Completion",
+      "action": "NONE"
+    },
+    {
+      "name": "Selfharm",
+      "severityThreshold": "Medium",
+      "blocking": true,
+      "enabled": true,
+      "source": "Prompt",
+      "action": "NONE"
+    },
+    {
+      "name": "Selfharm",
+      "severityThreshold": "Medium",
+      "blocking": true,
+      "enabled": true,
+      "source": "Completion",
+      "action": "NONE"
+    },
+    {
+      "name": "Sexual",
+      "severityThreshold": "Medium",
+      "blocking": true,
+      "enabled": true,
+      "source": "Prompt",
+      "action": "NONE"
+    },
+    {
+      "name": "Sexual",
+      "severityThreshold": "Medium",
+      "blocking": true,
+      "enabled": true,
+      "source": "Completion",
+      "action": "NONE"
+    },
+    {
+      "name": "Violence",
+      "severityThreshold": "Medium",
+      "blocking": true,
+      "enabled": true,
+      "source": "Prompt",
+      "action": "NONE"
+    },
+    {
+      "name": "Violence",
+      "severityThreshold": "Medium",
+      "blocking": true,
+      "enabled": true,
+      "source": "Completion",
+      "action": "NONE"
+    },
+    {
+      "name": "Jailbreak",
+      "blocking": true,
+      "enabled": true,
+      "source": "Prompt",
+      "action": "NONE"
+    },
+    {
+      "name": "Protected Material Text",
+      "blocking": true,
+      "enabled": true,
+      "source": "Completion",
+      "action": "NONE"
+    },
+    {
+      "name": "Protected Material Code",
+      "blocking": true,
+      "enabled": true,
+      "source": "PreToolCall",
+      "action": "NONE"
+    },
+    {
+      "name": "Protected Material Code",
+      "blocking": true,
+      "enabled": true,
+      "source": "Completion",
+      "action": "NONE"
+    },
+    {
       "name": "Indirect Attack",
+      "blocking": false,
+      "enabled": false,
+      "source": "Prompt",
+      "action": "NONE"
+    },
+    {
+      "name": "Indirect Attack Spotlighting",
+      "blocking": false,
+      "enabled": false,
+      "source": "Prompt",
+      "action": "NONE"
+    },
+    {
+      "name": "purview",
       "blocking": true,
       "enabled": true,
       "source": "Prompt",
       "action": "NONE"
     },
     {
-      "name": "Purview",
-      "blocking": true,
-      "enabled": true,
-      "source": "Prompt",
-      "action": "NONE"
-    },
-    {
-      "name": "Purview",
+      "name": "purview",
       "blocking": true,
       "enabled": true,
       "source": "Completion",

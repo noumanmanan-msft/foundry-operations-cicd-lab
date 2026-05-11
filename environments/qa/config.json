@@ -1,5 +1,10 @@
 {
   "environment": "qa",
+  "connectionNameSuffix": "qa",
+  "searchEndpointHost": "srch-qa-foundry-oplab-eus2.search.windows.net",
+  "azureOpenAIAccountHost": "aif-qa-foundry-operation-eastus2.openai.azure.com",
+  "projectArmPrefix": "/subscriptions/561c41c9-f3ec-4ad6-977a-ab33f0b43a6a/resourceGroups/rg-qa-foundry-operation-lab-eastus2/providers/Microsoft.CognitiveServices/accounts/aif-qa-foundry-operation-eastus2/projects/default-qa-project",
+  "accountArmPrefix": "/subscriptions/561c41c9-f3ec-4ad6-977a-ab33f0b43a6a/resourceGroups/rg-qa-foundry-operation-lab-eastus2/providers/Microsoft.CognitiveServices/accounts/aif-qa-foundry-operation-eastus2",
   "promotion": {
     "promotesTo": "prod",
     "requiresApproval": true,

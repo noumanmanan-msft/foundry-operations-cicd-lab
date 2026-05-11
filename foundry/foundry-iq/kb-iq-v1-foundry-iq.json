@@ -4,12 +4,10 @@
   "provider": "azure-ai-search",
   "indexName": "kb-iq-v1",
   "knowledgeBaseName": "kb-iq-v1",
-  "projectConnectionId": "kb-kb-iq-v1-119cl",
+  "projectConnectionId": "kb-kb-iq-v1-{connectionNameSuffix}",
   "mcpServerLabel": "kb_kb_iq_v1",
-  "knowledgeRef": "foundry/knowledge/operations-knowledge.json",
-  "indexRef": "foundry/indexes/operations-knowledge-index.json",
   "projectConnectionPrefix": "kb-kb-iq-v1-",
-  "projectConnectionNameTemplate": "kb-kb-iq-v1-{environment}",
-  "mcpServerUrlTemplate": "https://{searchEndpointHost}/knowledgebases/kb-iq-v1/mcp?api-version=2025-11-01-Preview",
+  "projectConnectionNameTemplate": "kb-kb-iq-v1-{connectionNameSuffix}",
+  "mcpServerUrlTemplate": "https://{searchEndpointHost}/knowledgebases/{knowledgeBaseName}/mcp?api-version=2025-11-01-Preview",
   "knowledgeBaseRef": "foundry/knowledgebases/kb-iq-v1.json"
 }

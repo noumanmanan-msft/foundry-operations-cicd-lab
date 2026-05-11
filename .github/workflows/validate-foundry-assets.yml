@@ -31,7 +31,7 @@ jobs:
           python-version: '3.12'
 
       - name: Validate asset graph
-        run: python scripts/validate_foundry_assets.py
+        run: python scripts/validate_foundry_assets.py --strict
 
       - name: Render Dev bundle
         run: python scripts/render_foundry_bundle.py --environment dev --output .dist/dev-bundle.json

@@ -1,5 +1,7 @@
 .dist/
+exports/
 infra/bicep/main.json
 infra/bicep/parameters/*.json
 **/__pycache__/
 *.pyc
+exports/
