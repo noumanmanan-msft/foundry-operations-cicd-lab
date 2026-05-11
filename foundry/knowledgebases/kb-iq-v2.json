@@ -5,9 +5,7 @@
   "projectConnectionPrefix": "kb-kb-iq-v2-",
   "projectConnectionNameTemplate": "kb-kb-iq-v2-{connectionNameSuffix}",
   "mcpServerUrlTemplate": "https://{searchEndpointHost}/knowledgebases/kb-iq-v2/mcp?api-version=2025-11-01-Preview",
-  "knowledgeSourceRefs": [
-    "foundry/knowledge-sources/ks-web-v1.json"
-  ],
+  "knowledgeSourceRefs": [],
   "definition": {
     "@odata.context": "https://{searchEndpointHost}/$metadata#knowledgebases/$entity",
     "name": "kb-iq-v2",

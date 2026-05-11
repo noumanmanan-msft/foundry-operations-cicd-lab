@@ -1,5 +1,5 @@
 {
-  "name": "Base-Guardrail-v2",
+  "name": "Base-Guardrails-v3",
   "inputPolicies": [
     "block-secrets-in-chat",
     "block-credential-exfiltration",
@@ -9,7 +9,7 @@
     "require-grounding-for-environment-claims",
     "require-escalation-when-confidence-low"
   ],
-  "raiPolicyName": "Base-Guardrail-v2",
+  "raiPolicyName": "Base-Guardrails-v3",
   "contentFilters": [
     {
       "name": "Hate",
@@ -93,21 +93,21 @@
       "name": "Protected Material Code",
       "blocking": true,
       "enabled": true,
+      "source": "PreToolCall",
+      "action": "NONE"
+    },
+    {
+      "name": "Protected Material Code",
+      "blocking": true,
+      "enabled": true,
       "source": "Completion",
       "action": "NONE"
     },
     {
       "name": "Indirect Attack",
-      "blocking": true,
-      "enabled": true,
+      "blocking": false,
+      "enabled": false,
       "source": "Prompt",
-      "action": "NONE"
-    },
-    {
-      "name": "Indirect Attack",
-      "blocking": true,
-      "enabled": true,
-      "source": "PostToolCall",
       "action": "NONE"
     },
     {
