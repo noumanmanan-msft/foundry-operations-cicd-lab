@@ -198,10 +198,11 @@ def extract_foundry_iq_attachments(tools: list[dict[str, Any]]) -> list[dict[str
 
     for tool in tools:
         t = safe_as_dict(tool) or {}
-        if (t.get("type") or "").lower() != "mcp":
+        kind = (t.get("type") or t.get("kind") or "").lower()
+        if kind != "mcp":
             continue
 
-        server_url = (t.get("server_url") or "").strip()
+        server_url = (t.get("server_url") or t.get("serverUrl") or "").strip()
         match = re.search(r"/knowledgebases/([^/]+)/mcp", server_url)
         if not match:
             continue
@@ -214,8 +215,12 @@ def extract_foundry_iq_attachments(tools: list[dict[str, Any]]) -> list[dict[str
         found.append(
             {
                 "name": kb_name,
-                "projectConnectionId": (t.get("project_connection_id") or "").strip(),
-                "mcpServerLabel": (t.get("server_label") or "").strip(),
+                "projectConnectionId": (
+                    t.get("project_connection_id")
+                    or t.get("projectConnectionId")
+                    or ""
+                ).strip(),
+                "mcpServerLabel": (t.get("server_label") or t.get("serverLabel") or "").strip(),
             }
         )
 
@@ -818,6 +823,17 @@ def sync_agent_bundle_to_repo(bundle: dict, repo_root: Path) -> dict:
 
     if attached["foundryIq"]:
         kb_snaps = bundle.get("knowledgeBases") or []
+        if not kb_snaps:
+            kb_snaps = [
+                {
+                    "name": item.get("name"),
+                    "projectConnectionId": item.get("projectConnectionId"),
+                    "knowledgeSourceNames": [],
+                    "definition": {},
+                }
+                for item in attached.get("foundryIq") or []
+                if isinstance(item, dict) and item.get("name")
+            ]
         foundry_iq_refs: list[str] = []
         agent_tools = agent_fields.get("tools") or []
 
@@ -860,7 +876,8 @@ def sync_agent_bundle_to_repo(bundle: dict, repo_root: Path) -> dict:
                 "projectConnectionPrefix": f"kb-{kb_name}-",
                 "projectConnectionNameTemplate": f"kb-{kb_name}-{{environment}}",
                 "mcpServerUrlTemplate": (
-                    f"https://{{searchEndpointHost}}/knowledgebases/{kb_name}/mcp?api-version=2025-11-01-Preview"
+                    "https://{searchEndpointHost}/knowledgebases/{knowledgeBaseName}/mcp"
+                    "?api-version=2025-11-01-Preview"
                 ),
             }
 
@@ -874,7 +891,8 @@ def sync_agent_bundle_to_repo(bundle: dict, repo_root: Path) -> dict:
                 "projectConnectionPrefix": f"kb-{kb_name}-",
                 "projectConnectionNameTemplate": f"kb-{kb_name}-{{environment}}",
                 "mcpServerUrlTemplate": (
-                    f"https://{{searchEndpointHost}}/knowledgebases/{kb_name}/mcp?api-version=2025-11-01-Preview"
+                    "https://{searchEndpointHost}/knowledgebases/{knowledgeBaseName}/mcp"
+                    "?api-version=2025-11-01-Preview"
                 ),
                 "knowledgeSourceRefs": [
                     knowledge_source_refs[name]
