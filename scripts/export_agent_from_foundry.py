@@ -28,6 +28,7 @@ Prerequisites:
 import argparse
 from datetime import datetime, timezone
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -190,6 +191,73 @@ def extract_search_attachment(tools: list[dict[str, Any]], tool_resources: dict[
     return payload
 
 
+def extract_foundry_iq_attachments(tools: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """Extract per-knowledgebase MCP attachments from agent tools."""
+    found: list[dict[str, str]] = []
+    seen: set[str] = set()
+
+    for tool in tools:
+        t = safe_as_dict(tool) or {}
+        if (t.get("type") or "").lower() != "mcp":
+            continue
+
+        server_url = (t.get("server_url") or "").strip()
+        match = re.search(r"/knowledgebases/([^/]+)/mcp", server_url)
+        if not match:
+            continue
+
+        kb_name = match.group(1).strip()
+        if not kb_name or kb_name in seen:
+            continue
+
+        seen.add(kb_name)
+        found.append(
+            {
+                "name": kb_name,
+                "projectConnectionId": (t.get("project_connection_id") or "").strip(),
+                "mcpServerLabel": (t.get("server_label") or "").strip(),
+            }
+        )
+
+    return found
+
+
+def normalize_kb_metadata_for_repo(payload: dict | None) -> dict | None:
+    """Return a repo-friendly knowledge payload with null/empty pruning."""
+    if not isinstance(payload, dict):
+        return payload
+
+    normalized: dict[str, Any] = {}
+    for key, value in payload.items():
+        if value is None:
+            continue
+        if isinstance(value, str) and not value.strip():
+            continue
+        normalized[key] = value
+    return normalized
+
+
+def build_knowledge_source_ref_map(repo_root: Path) -> dict[str, str]:
+    """Map knowledge source names to their file refs under foundry/knowledge-sources."""
+    refs: dict[str, str] = {}
+    sources_root = repo_root / "foundry" / "knowledge-sources"
+    if not sources_root.exists():
+        return refs
+
+    for candidate in sorted(sources_root.glob("*.json")):
+        try:
+            data = load_json(candidate)
+        except Exception:
+            continue
+
+        name = (data.get("name") or "").strip()
+        if not name:
+            continue
+        refs[name] = str(candidate.relative_to(repo_root))
+
+    return refs
+
+
 def fetch_rai_policy_from_arm(credential, foundry_resource_id: str, policy_basename: str) -> dict | None:
     """Fetch full RAI policy settings (content filters, mode, base policy) via the ARM API.
 
@@ -245,7 +313,9 @@ def derive_attached_resources(bundle: dict, arm_rai_policy: dict | None = None) 
         "model": None,
         "guardrail": None,
         "toolset": None,
+        "knowledge": None,
         "knowledgeIndex": None,
+        "foundryIq": [],
         "memory": None,
     }
 
@@ -305,6 +375,10 @@ def derive_attached_resources(bundle: dict, arm_rai_policy: dict | None = None) 
     knowledge_payload = extract_search_attachment(tools, tool_resources, connections)
     if knowledge_payload:
         attached["knowledgeIndex"] = knowledge_payload
+
+    foundry_iq_payload = extract_foundry_iq_attachments(tools)
+    if foundry_iq_payload:
+        attached["foundryIq"] = foundry_iq_payload
 
     if metadata.get("memoryMode"):
         attached["memory"] = {
@@ -663,6 +737,7 @@ def sync_agent_bundle_to_repo(bundle: dict, repo_root: Path) -> dict:
 
     default_slug = agent_name.replace("_", "-")
     synced_files: dict[str, str] = {}
+    knowledge_source_refs = build_knowledge_source_ref_map(repo_root)
 
     synced_agent = dict(existing_agent) if existing_agent else {}
     synced_agent["name"] = agent_name
@@ -947,6 +1022,18 @@ def export_agent(
         arm_rai_policy = fetch_rai_policy_from_arm(credential, foundry_resource_id, rai_policy_basename)
 
     bundle["attachedResources"] = derive_attached_resources(bundle, arm_rai_policy=arm_rai_policy)
+    if not bundle.get("knowledgeBases"):
+        fiq = bundle["attachedResources"].get("foundryIq") or []
+        bundle["knowledgeBases"] = [
+            {
+                "name": item.get("name"),
+                "projectConnectionId": item.get("projectConnectionId"),
+                "knowledgeSourceNames": [],
+                "definition": {},
+            }
+            for item in fiq
+            if isinstance(item, dict) and item.get("name")
+        ]
 
     result_json = json.dumps(bundle, indent=2) + "\n"
 
