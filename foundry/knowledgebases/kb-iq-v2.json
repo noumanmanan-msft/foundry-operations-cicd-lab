@@ -1,0 +1,40 @@
+{
+  "name": "kb-iq-v2",
+  "description": "Knowledgebase definition exported from Dev Azure AI Search.",
+  "projectConnectionId": "kb-kb-iq-v2-{connectionNameSuffix}",
+  "projectConnectionPrefix": "kb-kb-iq-v2-",
+  "projectConnectionNameTemplate": "kb-kb-iq-v2-{connectionNameSuffix}",
+  "mcpServerUrlTemplate": "https://{searchEndpointHost}/knowledgebases/kb-iq-v2/mcp?api-version=2025-11-01-Preview",
+  "knowledgeSourceRefs": [
+    "foundry/knowledge-sources/ks-web-v1.json"
+  ],
+  "definition": {
+    "@odata.context": "https://{searchEndpointHost}/$metadata#knowledgebases/$entity",
+    "name": "kb-iq-v2",
+    "description": "",
+    "retrievalInstructions": "",
+    "answerInstructions": "",
+    "outputMode": "answerSynthesis",
+    "knowledgeSources": [
+      {
+        "name": "ks-web-v1"
+      }
+    ],
+    "models": [
+      {
+        "kind": "azureOpenAI",
+        "azureOpenAIParameters": {
+          "resourceUri": "https://{azureOpenAIAccountHost}",
+          "deploymentId": "gpt-4o",
+          "apiKey": null,
+          "modelName": "gpt-4o",
+          "authIdentity": null
+        }
+      }
+    ],
+    "encryptionKey": null,
+    "retrievalReasoningEffort": {
+      "kind": "low"
+    }
+  }
+}

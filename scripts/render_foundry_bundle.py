@@ -9,21 +9,42 @@ def load_json(path: Path):
 
 def collect_assets(foundry_root: Path):
     bundle = {}
-    for category in ["models", "agents", "guardrails", "indexes", "tools", "memory", "evaluations"]:
+    for category in [
+        "models",
+        "agents",
+        "guardrails",
+        "indexes",
+        "tools",
+        "memory",
+        "evaluations",
+        "foundry-iq",
+        "knowledge",
+        "knowledgebases",
+        "knowledge-sources",
+    ]:
         category_root = foundry_root / category
         items = []
-        for path in sorted(category_root.rglob("*.json")):
-            items.append({
+        if category_root.exists():
+            for path in sorted(category_root.rglob("*.json")):
+                items.append({
+                    "path": str(path.relative_to(foundry_root.parent)),
+                    "content": load_json(path),
+                })
+        bundle[category] = items
+
+    bundle["prompts"] = []
+    prompts_root = foundry_root / "prompts"
+    if prompts_root.exists():
+        for path in sorted(prompts_root.glob("*.txt")):
+            bundle["prompts"].append({
+                "path": str(path.relative_to(foundry_root.parent)),
+                "content": path.read_text().strip(),
+            })
+        for path in sorted(prompts_root.glob("*.json")):
+            bundle["prompts"].append({
                 "path": str(path.relative_to(foundry_root.parent)),
                 "content": load_json(path),
             })
-        bundle[category] = items
-    bundle["prompts"] = []
-    for path in sorted((foundry_root / "prompts").glob("*.txt")):
-        bundle["prompts"].append({
-            "path": str(path.relative_to(foundry_root.parent)),
-            "content": path.read_text().strip(),
-        })
     return bundle
 
 

@@ -23,10 +23,9 @@ on:
         type: string
 
 jobs:
-  promote-prod:
+  preflight-prod:
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    environment: prod
     permissions:
       contents: read
       id-token: write
@@ -45,7 +44,7 @@ jobs:
         run: pip install azure-ai-projects azure-identity
 
       - name: Validate asset graph
-        run: python scripts/validate_foundry_assets.py
+        run: python scripts/validate_foundry_assets.py --strict
 
       - name: Render environment bundle
         run: |
@@ -66,9 +65,56 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Dry-run deploy agent to Foundry (pre-flight)
+        run: |
+          python scripts/deploy_agent_to_foundry.py \
+            --agent-name "${{ github.event_name == 'workflow_dispatch' && inputs['agent-name'] || 'incident-triage-hosted' }}" \
+            --environment "prod" \
+            --version "${{ github.event_name == 'workflow_dispatch' && inputs['agent-version'] || github.event.workflow_run.head_sha }}" \
+            --dry-run
+
+  promote-prod:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    needs: preflight-prod
+    runs-on: ubuntu-latest
+    environment: prod
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout requested ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs['git-ref'] || github.event.workflow_run.head_sha }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Foundry SDK dependencies
+        run: pip install azure-ai-projects azure-identity
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
       - name: Deploy agent to Foundry
+        if: success()
         run: |
           python scripts/deploy_agent_to_foundry.py \
             --agent-name "${{ github.event_name == 'workflow_dispatch' && inputs['agent-name'] || 'incident-triage-hosted' }}" \
             --environment "prod" \
             --version "${{ github.event_name == 'workflow_dispatch' && inputs['agent-version'] || github.event.workflow_run.head_sha }}"
+
+      - name: Verify promoted MCP wiring (Prod)
+        env:
+          AGENT_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs['agent-name'] || 'incident-triage-hosted' }}
+        run: |
+          set -euo pipefail
+          python scripts/verify_deployed_agent.py \
+            --agent-name "$AGENT_NAME" \
+            --environment prod

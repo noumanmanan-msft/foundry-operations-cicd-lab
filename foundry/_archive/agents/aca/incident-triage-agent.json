@@ -10,12 +10,25 @@
   "guardrailRef": "foundry/guardrails/standard-guardrails.json",
   "toolsetRef": "foundry/tools/platform-toolset.json",
   "knowledgeIndexRef": "foundry/indexes/operations-knowledge-index.json",
+  "knowledgeRef": "foundry/knowledge/operations-knowledge.json",
+  "foundryIqRefs": [
+    "foundry/foundry-iq/operations-foundry-iq.json"
+  ],
   "memoryRef": "foundry/memory/session-memory.json",
   "deployment": {
     "replicaProfile": {
-      "dev": { "minReplicas": 1, "maxReplicas": 1 },
-      "qa": { "minReplicas": 1, "maxReplicas": 2 },
-      "prod": { "minReplicas": 2, "maxReplicas": 4 }
+      "dev": {
+        "minReplicas": 1,
+        "maxReplicas": 1
+      },
+      "qa": {
+        "minReplicas": 1,
+        "maxReplicas": 2
+      },
+      "prod": {
+        "minReplicas": 2,
+        "maxReplicas": 4
+      }
     }
   }
 }

@@ -1,0 +1,15 @@
+{
+  "name": "kb-iq-v1-knowledge",
+  "description": "Knowledge asset exported from live Foundry attachment.",
+  "indexName": "kb-iq-v1",
+  "retrieval": {
+    "mode": "hybrid"
+  },
+  "knowledgeBaseName": "kb-iq-v1",
+  "indexRef": "foundry/indexes/operations-knowledge-index.json",
+  "projectConnectionId": "kb-kb-iq-v1-{connectionNameSuffix}",
+  "projectConnectionPrefix": "kb-kb-iq-v1-",
+  "projectConnectionNameTemplate": "kb-kb-iq-v1-{connectionNameSuffix}",
+  "mcpServerUrlTemplate": "https://{searchEndpointHost}/knowledgebases/kb-iq-v1/mcp?api-version=2025-11-01-Preview",
+  "mcpServerLabel": "kb_kb_iq_v1"
+}

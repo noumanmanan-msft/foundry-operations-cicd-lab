@@ -26,6 +26,7 @@ Prerequisites:
 """
 
 import argparse
+from datetime import datetime, timezone
 import json
 import sys
 from pathlib import Path
@@ -328,6 +329,326 @@ def find_repo_agent_file(repo_root: Path, agent_name: str) -> Path | None:
     return None
 
 
+def collect_referenced_foundry_iq_refs(repo_root: Path) -> set[str]:
+    """Collect all foundryIqRefs values from every agent JSON in foundry/agents/."""
+    refs: set[str] = set()
+    agents_root = repo_root / "foundry" / "agents"
+    if not agents_root.exists():
+        return refs
+
+    for candidate in sorted(agents_root.rglob("*.json")):
+        try:
+            data = load_json(candidate)
+        except Exception:
+            continue
+
+        value = data.get("foundryIqRefs")
+        if not isinstance(value, list):
+            continue
+        for item in value:
+            if isinstance(item, str) and item.strip():
+                refs.add(item.strip())
+
+    return refs
+
+
+def move_orphaned_foundry_iq_files(repo_root: Path, max_orphans: int = 5) -> int:
+    """Move unreferenced foundry-iq JSON files into foundry/foundry-iq/_orphaned/."""
+    foundry_iq_root = repo_root / "foundry" / "foundry-iq"
+    orphaned_root = foundry_iq_root / "_orphaned"
+    orphaned_root.mkdir(parents=True, exist_ok=True)
+
+    referenced_refs = collect_referenced_foundry_iq_refs(repo_root)
+    orphan_candidates: list[Path] = []
+
+    for candidate in sorted(foundry_iq_root.glob("*.json")):
+        rel = str(candidate.relative_to(repo_root))
+        if rel not in referenced_refs:
+            orphan_candidates.append(candidate)
+
+    if len(orphan_candidates) > max_orphans:
+        listed = "\n".join(f"  - {str(path.relative_to(repo_root))}" for path in orphan_candidates)
+        raise RuntimeError(
+            "Orphan cleanup aborted: more than 5 unreferenced foundry-iq files detected.\n"
+            "Candidate orphans:\n"
+            f"{listed}\n"
+            "Fix references or re-run with --no-orphan-cleanup to skip moving files."
+        )
+
+    moved_count = 0
+    for source in orphan_candidates:
+        destination = orphaned_root / source.name
+        if destination.exists():
+            stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
+            destination = orphaned_root / f"{source.stem}.{stamp}{source.suffix}"
+            if destination.exists():
+                idx = 1
+                while True:
+                    alt = orphaned_root / f"{source.stem}.{stamp}.{idx}{source.suffix}"
+                    if not alt.exists():
+                        destination = alt
+                        break
+                    idx += 1
+
+        source.rename(destination)
+        moved_count += 1
+        print(
+            "[export] orphaned foundry-iq file: "
+            f"{source.name} -> {str(destination.relative_to(repo_root))} "
+            "(no agent in foundry/agents/ references this file)",
+            file=sys.stderr,
+        )
+
+    print(f"[export] orphans moved: {moved_count}.", file=sys.stderr)
+    return moved_count
+
+
+def resolve_connection_suffix(config: dict) -> str:
+    configured = (config.get("connectionNameSuffix") or "").strip()
+    if configured:
+        return configured
+    return (config.get("environment") or "").strip()
+
+
+def discover_connection_suffixes(repo_root: Path) -> set[str]:
+    suffixes: set[str] = set()
+    env_root = repo_root / "environments"
+    for env in ["dev", "qa", "prod"]:
+        cfg_path = env_root / env / "config.json"
+        if not cfg_path.exists():
+            continue
+        try:
+            cfg = load_json(cfg_path)
+        except Exception:
+            continue
+        value = (cfg.get("connectionNameSuffix") or "").strip()
+        if value:
+            suffixes.add(value)
+    return suffixes
+
+
+def discover_local_connection_suffixes(payload: Any, known_suffixes: set[str]) -> set[str]:
+    """Find concrete connection suffix values present in a single file payload."""
+    found: set[str] = set()
+
+    def walk(value: Any):
+        if isinstance(value, dict):
+            for key, inner in value.items():
+                if key == "projectConnectionId" and isinstance(inner, str):
+                    match = re.search(r"-([a-zA-Z0-9]+)$", inner)
+                    if match:
+                        candidate = match.group(1)
+                        if candidate in known_suffixes:
+                            found.add(candidate)
+                walk(inner)
+        elif isinstance(value, list):
+            for item in value:
+                walk(item)
+
+    walk(payload)
+    return found
+
+
+def replace_connection_suffix(value: str, suffixes: set[str]) -> str:
+    updated = value
+    for suffix in sorted(suffixes, key=len, reverse=True):
+        if not suffix:
+            continue
+        updated = re.sub(
+            rf"-{re.escape(suffix)}(?=($|[^a-zA-Z0-9]))",
+            "-{connectionNameSuffix}",
+            updated,
+        )
+    return updated
+
+
+def tokenize_search_host(value: str) -> str:
+    return re.sub(
+        r"\b(?:srch-(?:dev|qa|prod)[^/\s\"']*\.search\.windows\.net)\b",
+        "{searchEndpointHost}",
+        value,
+    )
+
+
+def tokenize_openai_host(value: str) -> str:
+    return re.sub(
+        r"\b(?:aif-(?:dev|qa|prod)[^/\s\"']*\.openai\.azure\.com)\b",
+        "{azureOpenAIAccountHost}",
+        value,
+    )
+
+
+def tokenize_arm_paths(value: str) -> str:
+    project_match = re.match(
+        r"^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft\.CognitiveServices/accounts/[^/]+/projects/[^/]+/connections/([^/]+)$",
+        value,
+    )
+    if project_match:
+        return f"{{projectArmPrefix}}/connections/{project_match.group(1)}"
+
+    policy_match = re.match(
+        r"^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft\.CognitiveServices/accounts/[^/]+/raiPolicies/([^/]+)$",
+        value,
+    )
+    if policy_match:
+        return f"{{accountArmPrefix}}/raiPolicies/{policy_match.group(1)}"
+
+    return value
+
+
+def sanitize_string_value(
+    value: str,
+    key: str,
+    suffixes: set[str],
+    local_suffixes: set[str],
+) -> str:
+    updated = value
+
+    if key == "mcpServerLabel":
+        for suffix in sorted(local_suffixes, key=len, reverse=True):
+            marker = f"_{suffix}"
+            if updated.endswith(marker):
+                updated = updated[: -len(marker)]
+                break
+
+    if key in {"projectConnectionId", "projectConnectionPrefix", "projectConnectionNameTemplate"}:
+        updated = replace_connection_suffix(updated, suffixes)
+        if key == "projectConnectionNameTemplate":
+            updated = updated.replace("{environment}", "{connectionNameSuffix}")
+
+    if key in {"connectionId", "id", "raiPolicyName"} or "/subscriptions/" in updated:
+        updated = tokenize_arm_paths(updated)
+
+    updated = tokenize_search_host(updated)
+    updated = tokenize_openai_host(updated)
+    return updated
+
+
+def normalize_agent_connections_section(payload: dict):
+    connections = payload.get("connections")
+    if not isinstance(connections, dict):
+        return
+
+    refs = connections.get("referencedConnections")
+    if not isinstance(refs, list):
+        return
+
+    simplified = []
+    for ref in refs:
+        if not isinstance(ref, dict):
+            continue
+        connection_name = ref.get("name") or basename_from_resource_id(ref.get("id")) or ""
+        auth_type = ""
+        credentials = ref.get("credentials")
+        if isinstance(credentials, dict):
+            auth_type = credentials.get("type") or ""
+        if not auth_type:
+            auth_type = ref.get("authType") or ""
+        target_template = ref.get("target") or ""
+        simplified.append(
+            {
+                "connectionName": connection_name,
+                "authType": auth_type,
+                "targetTemplate": target_template,
+            }
+        )
+
+    payload["connections"] = {"referencedConnections": simplified}
+
+
+def sanitize_value(
+    value: Any,
+    suffixes: set[str],
+    local_suffixes: set[str],
+    parent_key: str = "",
+) -> Any:
+    keys_to_strip = {
+        "createdAt",
+        "modifiedAt",
+        "created_at",
+        "modified_at",
+        "systemData",
+        "etag",
+        "eTag",
+        "@odata.etag",
+    }
+
+    if isinstance(value, dict):
+        cleaned: dict[str, Any] = {}
+        for key, inner in value.items():
+            if key in keys_to_strip:
+                continue
+            cleaned[key] = sanitize_value(inner, suffixes, local_suffixes, key)
+        return cleaned
+
+    if isinstance(value, list):
+        return [sanitize_value(item, suffixes, local_suffixes, parent_key) for item in value]
+
+    if isinstance(value, str):
+        return sanitize_string_value(value, parent_key, suffixes, local_suffixes)
+
+    return value
+
+
+def enforce_sanitization_invariants(path: Path, payload: dict, suffixes: set[str]):
+    serialized = json.dumps(payload, indent=2)
+    forbidden = [
+        "aif-dev-",
+        "aif-qa-",
+        "aif-prod-",
+        "srch-dev-",
+        "srch-qa-",
+        "srch-prod-",
+        "/subscriptions/",
+        "@odata.etag",
+        "createdAt",
+        "modifiedAt",
+        "systemData",
+    ]
+
+    for suffix in sorted(suffixes):
+        if suffix:
+            forbidden.extend([suffix, f"_{suffix}", f"-{suffix}"])
+
+    for needle in forbidden:
+        if needle in serialized:
+            raise RuntimeError(
+                f"Sanitization invariant failed for {path}: found forbidden string '{needle}'"
+            )
+
+
+def write_sanitized_json(path: Path, payload: dict, suffixes: set[str]):
+    enforce_sanitization_invariants(path, payload, suffixes)
+    write_json(path, payload)
+
+
+def sanitize_repo_assets(repo_root: Path) -> dict[str, int]:
+    suffixes = discover_connection_suffixes(repo_root)
+
+    targets = [
+        repo_root / "foundry" / "foundry-iq",
+        repo_root / "foundry" / "knowledgebases",
+        repo_root / "foundry" / "knowledge",
+        repo_root / "foundry" / "indexes",
+    ]
+
+    files_sanitized = 0
+    for target in targets:
+        if not target.exists():
+            continue
+        for path in sorted(target.rglob("*.json")):
+            if "_orphaned" in path.parts:
+                continue
+            payload = load_json(path)
+            local_suffixes = discover_local_connection_suffixes(payload, suffixes)
+            sanitized = sanitize_value(payload, suffixes, local_suffixes)
+            write_sanitized_json(path, sanitized, suffixes)
+            files_sanitized += 1
+
+    print(f"[export] Sanitized repo assets: {files_sanitized} file(s)", file=sys.stderr)
+    return {"filesSanitized": files_sanitized}
+
+
 def sync_agent_bundle_to_repo(bundle: dict, repo_root: Path) -> dict:
     agent_fields = bundle["agent"]
     agent_name = agent_fields["name"]
@@ -394,14 +715,111 @@ def sync_agent_bundle_to_repo(bundle: dict, repo_root: Path) -> dict:
     else:
         synced_agent.pop("toolsetRef", None)
 
-    if attached["knowledgeIndex"]:
+    # Only write legacy singular knowledge/index files when the agent has no foundryIq (multi-KB) data.
+    # When foundryIq is present, the per-KB knowledgebases/ files already capture all this information
+    # and the deployer reads from foundryIqRefs — writing these files would produce unreferenced stale copies.
+    if attached["knowledgeIndex"] and not attached["foundryIq"]:
         knowledge_ref = choose_ref(existing_agent, "knowledgeIndexRef", f"foundry/indexes/{default_slug}-knowledge-index.json")
         knowledge_file = repo_root / knowledge_ref
-        write_json(knowledge_file, attached["knowledgeIndex"])
-        synced_agent["knowledgeIndexRef"] = knowledge_ref
+        existing_knowledge_index = load_json(knowledge_file) if knowledge_file.exists() else {}
+        normalized_knowledge_index = normalize_kb_metadata_for_repo(attached["knowledgeIndex"]) or {}
+        merged_knowledge_index = dict(existing_knowledge_index)
+        merged_knowledge_index.update({k: v for k, v in normalized_knowledge_index.items() if v is not None})
+        if isinstance(existing_knowledge_index.get("retrieval"), dict) or isinstance(normalized_knowledge_index.get("retrieval"), dict):
+            merged_retrieval = dict(existing_knowledge_index.get("retrieval", {}))
+            merged_retrieval.update(normalized_knowledge_index.get("retrieval", {}))
+            merged_knowledge_index["retrieval"] = merged_retrieval
+        write_json(knowledge_file, merged_knowledge_index)
         synced_files["knowledgeIndex"] = str(knowledge_file.relative_to(repo_root))
+    synced_agent.pop("knowledgeIndexRef", None)
+
+    if attached["knowledge"] and not attached["foundryIq"]:
+        knowledge_ref = choose_ref(existing_agent, "knowledgeRef", f"foundry/knowledge/{default_slug}-knowledge.json")
+        knowledge_file = repo_root / knowledge_ref
+        knowledge_payload = normalize_kb_metadata_for_repo(attached["knowledge"]) or {}
+        write_json(knowledge_file, knowledge_payload)
+        synced_files["knowledge"] = str(knowledge_file.relative_to(repo_root))
+    synced_agent.pop("knowledgeRef", None)
+
+    if attached["foundryIq"]:
+        kb_snaps = bundle.get("knowledgeBases") or []
+        foundry_iq_refs: list[str] = []
+        agent_tools = agent_fields.get("tools") or []
+
+        # Iterate over ALL captured knowledgebases; create separate foundry-iq JSON per KB
+        for kb_snap in kb_snaps:
+            kb_name = (kb_snap.get("name") or "").strip()
+            if not kb_name:
+                continue
+
+            matching_tool = next(
+                (
+                    tool
+                    for tool in agent_tools
+                    if isinstance(tool, dict)
+                    and f"/knowledgebases/{kb_name}/mcp" in (tool.get("server_url") or "")
+                ),
+                {},
+            )
+
+            project_connection_id = (
+                (kb_snap.get("projectConnectionId") or "").strip()
+                or (matching_tool.get("project_connection_id") or "").strip()
+            )
+            mcp_server_label = (
+                (matching_tool.get("server_label") or "").strip()
+                or f"kb_{kb_name}".replace("-", "_")
+            )
+
+            # Create foundry-iq JSON for this specific KB
+            foundry_iq_ref = f"foundry/foundry-iq/{kb_name}-foundry-iq.json"
+            foundry_iq_file = repo_root / foundry_iq_ref
+            foundry_iq_payload = {
+                "name": f"{kb_name}-foundry-iq",
+                "description": "Foundry IQ configuration exported from live Foundry attachment.",
+                "provider": "azure-ai-search",
+                "indexName": kb_name,
+                "knowledgeBaseName": kb_name,
+                "projectConnectionId": project_connection_id,
+                "mcpServerLabel": mcp_server_label,
+                "projectConnectionPrefix": f"kb-{kb_name}-",
+                "projectConnectionNameTemplate": f"kb-{kb_name}-{{environment}}",
+                "mcpServerUrlTemplate": (
+                    f"https://{{searchEndpointHost}}/knowledgebases/{kb_name}/mcp?api-version=2025-11-01-Preview"
+                ),
+            }
+
+            # Write the KB definition file
+            kb_ref = f"foundry/knowledgebases/{kb_name}.json"
+            kb_file = repo_root / kb_ref
+            kb_repo_payload = {
+                "name": kb_name,
+                "description": "Knowledgebase definition exported from Dev Azure AI Search.",
+                "projectConnectionId": project_connection_id,
+                "projectConnectionPrefix": f"kb-{kb_name}-",
+                "projectConnectionNameTemplate": f"kb-{kb_name}-{{environment}}",
+                "mcpServerUrlTemplate": (
+                    f"https://{{searchEndpointHost}}/knowledgebases/{kb_name}/mcp?api-version=2025-11-01-Preview"
+                ),
+                "knowledgeSourceRefs": [
+                    knowledge_source_refs[name]
+                    for name in kb_snap.get("knowledgeSourceNames") or []
+                    if name in knowledge_source_refs
+                ],
+                "definition": kb_snap.get("definition") or {},
+            }
+            write_json(kb_file, kb_repo_payload)
+            foundry_iq_payload["knowledgeBaseRef"] = kb_ref
+
+            write_json(foundry_iq_file, foundry_iq_payload)
+            foundry_iq_refs.append(foundry_iq_ref)
+            synced_files[f"foundryIq:{kb_name}"] = str(foundry_iq_file.relative_to(repo_root))
+
+        synced_agent["foundryIqRefs"] = foundry_iq_refs
+        synced_agent.pop("foundryIqRef", None)
     else:
-        synced_agent.pop("knowledgeIndexRef", None)
+        synced_agent.pop("foundryIqRefs", None)
+        synced_agent.pop("foundryIqRef", None)
 
     if attached["memory"]:
         memory_ref = choose_ref(existing_agent, "memoryRef", f"foundry/memory/{default_slug}-memory.json")
@@ -472,6 +890,7 @@ def export_agent(
     environment: str,
     output_path: Path | None,
     sync_repo: bool,
+    no_orphan_cleanup: bool,
 ) -> dict:
     from azure.ai.projects import AIProjectClient
     from azure.identity import DefaultAzureCredential
@@ -540,10 +959,16 @@ def export_agent(
 
     if sync_repo:
         synced_files = sync_agent_bundle_to_repo(bundle, repo_root)
+        sanitize_repo_assets(repo_root)
         bundle["repoSync"] = synced_files
         print("[export] Synced attached resources into foundry/ files:", file=sys.stderr)
         for _, path in synced_files.items():
             print(f"  - {path}", file=sys.stderr)
+
+        if no_orphan_cleanup:
+            print("[export] Orphan cleanup skipped (--no-orphan-cleanup).", file=sys.stderr)
+        else:
+            move_orphaned_foundry_iq_files(repo_root)
 
     return bundle
 
@@ -575,11 +1000,22 @@ def main():
             "and promoted via PR (Dev->QA->Prod)."
         ),
     )
+    parser.add_argument(
+        "--no-orphan-cleanup",
+        action="store_true",
+        help="Skip moving unreferenced foundry-iq files to _orphaned/.",
+    )
     args = parser.parse_args()
 
     output = Path(args.output) if args.output else None
     try:
-        export_agent(args.agent_name, args.environment, output, args.sync_repo)
+        export_agent(
+            args.agent_name,
+            args.environment,
+            output,
+            args.sync_repo,
+            args.no_orphan_cleanup,
+        )
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         sys.exit(1)

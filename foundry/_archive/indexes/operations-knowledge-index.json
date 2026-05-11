@@ -1,0 +1,13 @@
+{
+  "name": "kb-iq-v1",
+  "description": "Knowledge index exported from live agent attachment.",
+  "retrieval": {
+    "mode": "hybrid"
+  },
+  "knowledgeBaseName": "kb-iq-v1",
+  "mcpServerLabel": "kb_kb_iq_v1",
+  "projectConnectionId": "kb-kb-iq-v1-{connectionNameSuffix}",
+  "projectConnectionPrefix": "kb-kb-iq-v1-",
+  "projectConnectionNameTemplate": "kb-kb-iq-v1-{connectionNameSuffix}",
+  "mcpServerUrlTemplate": "https://{searchEndpointHost}/knowledgebases/kb-iq-v1/mcp?api-version=2025-11-01-Preview"
+}

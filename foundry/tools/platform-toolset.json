@@ -4,17 +4,12 @@
     {
       "name": "search-knowledge",
       "kind": "mcp",
-      "purpose": "Ground incident answers against indexed operating content."
+      "purpose": "https://{searchEndpointHost}/knowledgebases/kb-iq-v1/mcp?api-version=2025-11-01-Preview"
     },
     {
-      "name": "create-change-ticket",
-      "kind": "function",
-      "purpose": "Open a change record for deployment or policy updates."
-    },
-    {
-      "name": "request-approval",
-      "kind": "function",
-      "purpose": "Initiate human approval for QA or Prod promotion."
+      "name": "kb_kb_iq_v2",
+      "kind": "mcp",
+      "purpose": "https://{searchEndpointHost}/knowledgebases/kb-iq-v2/mcp?api-version=2025-11-01-Preview"
     }
   ]
 }

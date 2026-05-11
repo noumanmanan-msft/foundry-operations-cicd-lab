@@ -38,7 +38,7 @@ jobs:
         run: pip install azure-ai-projects azure-identity
 
       - name: Validate asset graph
-        run: python scripts/validate_foundry_assets.py
+        run: python scripts/validate_foundry_assets.py --strict
 
       - name: Render environment bundle
         run: |
@@ -59,7 +59,16 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Dry-run deploy agent to Foundry (pre-flight)
+        run: |
+          python scripts/deploy_agent_to_foundry.py \
+            --agent-name "incident-triage-hosted" \
+            --environment "dev" \
+            --version "${{ github.sha }}" \
+            --dry-run
+
       - name: Deploy agent to Foundry
+        if: success()
         run: |
           python scripts/deploy_agent_to_foundry.py \
             --agent-name "incident-triage-hosted" \
