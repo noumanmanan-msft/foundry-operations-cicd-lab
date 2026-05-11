@@ -22,6 +22,8 @@ import argparse
 import json
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 # Renderer is a pure dict→dict module; import at module level (no network/SDK).
